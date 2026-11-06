@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#c8312b">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>구급 소모품 관리</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f4f2;--sf:#fff;--tx:#1d2325;--mu:#5d686b;--ln:#d9dedd;--ac:#c8312b;--acx:#fff;--ok:#1e7a55;--wn:#b36b00;--wnb:#fdf0d6;--er:#b42318;--erb:#fde4e1;--okb:#dff3ea;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151a1b;--sf:#1f2628;--tx:#e8eded;--mu:#9aa6a8;--ln:#333d3f;--ac:#ef6a63;--acx:#1a0c0b;--ok:#5fc79a;--wn:#f0b254;--wnb:#3a2c10;--er:#ff8a80;--erb:#3d1b18;--okb:#173326}}
+:root[data-theme="dark"]{--bg:#151a1b;--sf:#1f2628;--tx:#e8eded;--mu:#9aa6a8;--ln:#333d3f;--ac:#ef6a63;--acx:#1a0c0b;--ok:#5fc79a;--wn:#f0b254;--wnb:#3a2c10;--er:#ff8a80;--erb:#3d1b18;--okb:#173326}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--tx);font:15px/1.5 "Noto Sans KR",system-ui,sans-serif}
+.app{max-width:760px;margin:0 auto;padding:0 14px 84px}
+header{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:12px 0 8px;z-index:5;display:flex;gap:10px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--ln)}
+h1{font-size:18px;margin:0;font-weight:700}
+.who{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--mu)}
+.who input{width:96px}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--sf);border-top:1px solid var(--ln);display:flex;padding-bottom:env(safe-area-inset-bottom,0px);z-index:6}
+nav button{flex:1;border:0;background:none;color:var(--mu);padding:12px 2px;font:inherit;font-size:13px;cursor:pointer;border-top:3px solid transparent}
+nav button.on{color:var(--ac);font-weight:700;border-top-color:var(--ac)}
+input,select,textarea,button{font:inherit;color:var(--tx)}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--ln);border-radius:6px;background:var(--sf);min-height:44px}
+label{display:block;font-size:13px;color:var(--mu);margin:12px 0 4px}
+.btn{background:var(--ac);color:var(--acx);border:0;border-radius:6px;padding:12px 16px;font-weight:700;cursor:pointer;min-height:44px;width:100%;margin-top:16px}
+.btn.s{background:var(--sf);color:var(--tx);border:1px solid var(--ln);width:auto;margin:0;padding:6px 10px;min-height:32px;font-size:13px;font-weight:500}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.sum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.sum div{background:var(--sf);border:1px solid var(--ln);border-radius:6px;padding:10px}
+.sum b{display:block;font-size:22px;line-height:1.2}.sum span{font-size:12px;color:var(--mu)}
+.sum .bad b{color:var(--er)}.sum .warn b{color:var(--wn)}
+.card{background:var(--sf);border:1px solid var(--ln);border-radius:6px;margin:8px 0;padding:10px 12px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;margin-left:4px}
+.t-er{background:var(--erb);color:var(--er)}.t-wn{background:var(--wnb);color:var(--wn)}.t-ok{background:var(--okb);color:var(--ok)}
+details summary{cursor:pointer;list-style:none}details summary::-webkit-details-marker{display:none}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+td,th{padding:6px 4px;border-bottom:1px solid var(--ln);text-align:left}th{color:var(--mu);font-weight:500}
+.wrap{overflow-x:auto}.mu{color:var(--mu);font-size:13px}.num{font-variant-numeric:tabular-nums;text-align:right}
+.note{background:var(--wnb);color:var(--wn);border-radius:6px;padding:8px 10px;font-size:13px;margin:10px 0}
+.pv{background:var(--okb);color:var(--ok);border-radius:6px;padding:8px 10px;font-size:13px;margin-top:12px}
+.pv.x{background:var(--erb);color:var(--er)}
+.void{opacity:.5;text-decoration:line-through}
+textarea{min-height:90px;font-size:12px;font-family:monospace}
+body.pc .app{max-width:1000px;padding-bottom:24px}body.pc .who,body.pc nav{display:none}body.pc #v{display:block}
+body.pc details.card summary{cursor:default}
+@media(max-width:480px){.sum{grid-template-columns:repeat(2,1fr)}}
+</style></head><body>
+<div class="app">
+<header><h1>구급 소모품 관리</h1><div class="who">담당자 <input id="u" aria-label="담당자 이름" placeholder="이름"></div></header>
+<main id="v"></main>
+</div>
+<nav id="n"></nav>
+<script>
+const K='emsStockV2',WARN=90;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9);
+const p2=n=>String(n).padStart(2,'0');
+const ymd=d=>d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+const addD=n=>{const d=new Date();d.setDate(d.getDate()+n);return ymd(d)};
+const now=()=>{const d=new Date();return ymd(d)+' '+p2(d.getHours())+':'+p2(d.getMinutes())};
+const dleft=e=>Math.round((new Date(e+'T00:00:00')-new Date(ymd(new Date())+'T00:00:00'))/864e5);
+function seed(){
+ const it=[['멸균 거즈','장',100],['탄력 붕대','개',20],['일회용 장갑','켤레',200],['생리식염수 500ml','개',10],['산소마스크','개',8],['지혈대','개',6]].map(a=>({id:uid(),name:a[0],unit:a[1],min:a[2]}));
+ const L=[[0,400,120],[0,30,-12],[1,45,400],[2,150,200],[2,120,500],[3,6,25],[3,12,300],[4,5,600],[5,9,700]];
+ const lots=L.map(a=>({id:uid(),itemId:it[a[0]].id,qty:a[1],exp:addD(a[2]),inDate:addD(-20)}));
+ const logs=lots.map(l=>({id:uid(),ts:l.inDate+' 09:00',type:'in',itemId:l.itemId,lotId:l.id,exp:l.exp,d:l.qty,note:'기초 재고',user:'관리자',synced:false,voided:false}));
+ return {items:[],lots:[],logs:[],user:'',lastSync:''};
+}
+let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+if(!S||!S.items)S=seed();
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
+const item=id=>S.items.find(i=>i.id===id)||{name:'?',unit:''};
+const lotsOf=id=>S.lots.filter(l=>l.itemId===id&&l.qty>0).sort((a,b)=>a.exp<b.exp?-1:1);
+const total=id=>lotsOf(id).reduce((s,l)=>s+l.qty,0);
+const dateOf=g=>g.date||g.ts.slice(0,10);
+const lastOut=id=>{const a=S.logs.filter(g=>g.itemId===id&&g.type==='out'&&!g.voided).sort((x,y)=>dateOf(x)+x.ts<dateOf(y)+y.ts?-1:1).pop();return a?dateOf(a)+' (담당 '+esc(a.user)+')':'-'};
+const inUser=l=>{const g=S.logs.filter(x=>x.lotId===l.id&&x.type==='in'&&!x.voided).pop();return g?g.user:'-'};
+let tab='stock',flt='all',rf=addD(-30),rt=ymd(new Date());
+const TABS=[['stock','재고'],['in','입고'],['out','출고'],['hist','이력'],['exp','엑셀']];
+function go(t){tab=t;ed=null;render()}
+function msg(t){alert(t)}
+function user(){const u=$('#u').value.trim();if(!u){msg('담당자 이름을 먼저 입력하세요.');$('#u').focus();return null}S.user=u;return u}
+let ed=null;
+const memoOf=l=>l.memo!==undefined?l.memo:((S.logs.filter(x=>x.lotId===l.id&&x.type==='in'&&!x.voided).pop()||{}).note||'');
+function editLot(id){ed=id;render()}
+function editView(){
+ const l=S.lots.find(x=>x.id===ed);if(!l){ed=null;return ''}
+ return `<div class="card"><b>${esc(item(l.itemId).name)}</b> 재고 수정</div>
+ <label for="d1">입고일</label><input id="d1" type="date" value="${l.inDate||''}">
+ <label for="d2">유효기간</label><input id="d2" type="date" value="${l.exp}">
+ <label for="d3">현재 수량</label><input id="d3" type="number" min="0" inputmode="numeric" value="${l.qty}">
+ <label for="d4">메모</label><input id="d4" value="${esc(memoOf(l))}">
+ <button class="btn" onclick="saveLot()">수정 저장</button>
+ <button class="btn s" style="width:100%;margin-top:10px;min-height:44px" onclick="ed=null;render()">취소</button>
+ <p class="mu">수정해도 기존 기록은 지워지지 않고, 이력에 "정정" 기록이 추가됩니다.</p>`;
+}
+function saveLot(){
+ const u=user();if(!u)return;
+ const l=S.lots.find(x=>x.id===ed);if(!l)return;
+ const dt=$('#d1').value,ex=$('#d2').value,q=parseInt($('#d3').value,10),mm=$('#d4').value.trim();
+ if(!dt)return msg('입고일을 입력하세요.');
+ if(!ex)return msg('유효기간을 입력하세요.');
+ if(!(q>=0))return msg('수량은 0 이상으로 입력하세요.');
+ if(S.lots.some(x=>x.id!==l.id&&x.itemId===l.itemId&&x.exp===ex&&x.inDate===dt))return msg('같은 입고일·유효기간의 재고가 이미 있습니다. 해당 재고의 수량을 수정하세요.');
+ const ch=[],om=memoOf(l);
+ if(l.inDate!==dt)ch.push('입고일 '+(l.inDate||'-')+'→'+dt);
+ if(l.exp!==ex)ch.push('유효기간 '+l.exp+'→'+ex);
+ if(l.qty!==q)ch.push('수량 '+l.qty+'→'+q);
+ if(om!==mm)ch.push('메모 변경');
+ if(!ch.length){ed=null;return render()}
+ const dq=q-l.qty;
+ l.inDate=dt;l.exp=ex;l.qty=q;l.memo=mm;
+ S.logs.push({id:uid(),ts:now(),type:'fix',itemId:l.itemId,lotId:l.id,exp:ex,d:dq,date:ymd(new Date()),note:'수정: '+ch.join(', '),user:u,synced:false,voided:false});
+ save();ed=null;msg('수정 저장 완료');render();
+}
+function stock(){
+ if(ed)return editView();
+ let tq=0,soon=0,exp=0,low=0;
+ const rows=S.items.map(it=>{
+  const ls=lotsOf(it.id),t=ls.reduce((s,l)=>s+l.qty,0);tq+=t;
+  const ex=ls.filter(l=>dleft(l.exp)<0),sn=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN);
+  const ok=t-ex.reduce((s,l)=>s+l.qty,0);
+  exp+=ex.length;soon+=sn.length;
+  return `<details class="card"><summary><div class="row"><b>${esc(it.name)}</b><span><b class="num">${t}</b> ${esc(it.unit)}</span></div>
+  <div class="mu">사용 가능 ${ok} · 최근 출고일 ${lastOut(it.id)}
+  ${ex.length?'<span class="tag t-er">만료 '+ex.length+'건</span>':''}${sn.length?'<span class="tag t-wn">임박 '+sn.length+'건</span>':''}</div></summary>
+  <div class="wrap"><table><tr><th>입고일</th><th>입고 담당</th><th>유효기간</th><th>남은 일</th><th class="num">수량</th><th></th></tr>${ls.map(l=>{const d=dleft(l.exp);return `<tr><td>${l.inDate||'-'}${memoOf(l)?'<div class="mu">'+esc(memoOf(l))+'</div>':''}</td><td>${esc(inUser(l))}</td><td>${l.exp}</td><td>${d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">D-'+d+'</span>':'D-'+d}</td><td class="num">${l.qty}</td><td><button class="btn s" onclick="editLot('${l.id}')">수정</button></td></tr>`}).join('')||'<tr><td colspan="6" class="mu">재고 없음</td></tr>'}</table></div></details>`}).join('');
+ return `<div class="sum"><div><b>${S.items.length}</b><span>관리 품목</span></div><div><b>${tq}</b><span>총 재고 수량</span></div><div class="${soon?'warn':''}"><b>${soon}</b><span>${WARN}일 내 임박</span></div><div class="${exp?'bad':''}"><b>${exp}</b><span>만료 (폐기 대상)</span></div></div>${rows||'<div class="card mu">등록된 품목이 없습니다. 아래 입고 탭에서 새 품목을 등록하고 입고하세요.</div>'}
+ <p class="mu">같은 품목도 유효기간이 다르면 따로 관리합니다. 출고는 유효기간이 빠른 것부터 자동 차감됩니다.</p>
+ <button class="btn s" onclick="if(confirm('모든 품목과 기록을 삭제할까요? 되돌릴 수 없습니다.')){S=seed();save();render()}">전체 데이터 삭제</button>`;
+}
+function inView(){
+ return `<label for="i1">품목</label><select id="i1" onchange="$('#nw').style.display=this.value==='_new'?'block':'none'">${S.items.map(i=>`<option value="${i.id}">${esc(i.name)} (${esc(i.unit)})</option>`).join('')}<option value="_new">+ 새 품목 등록</option></select>
+ <div id="nw" style="display:${S.items.length?'none':'block'}"><label for="i2">새 품목명</label><input id="i2"><label for="i3">단위 (예: 개, 장)</label><input id="i3" value="개"></div>
+ <label for="i8">입고일</label><input id="i8" type="date" value="${ymd(new Date())}"><label for="i5">유효기간</label><input id="i5" type="date"><label for="i6">입고 수량</label><input id="i6" type="number" min="1" inputmode="numeric">
+ <label for="i7">메모 (선택)</label><input id="i7" placeholder="예: 납품처, 인수 확인자">
+ <button class="btn" onclick="doIn()">입고 저장</button><p class="mu">바코드·OCR 인식은 다음 단계에서 추가됩니다. 지금은 직접 입력합니다.</p>`;
+}
+function doIn(){
+ const u=user();if(!u)return;
+ let id=$('#i1').value;const exp=$('#i5').value,q=parseInt($('#i6').value,10),dt=$('#i8').value;
+ if(!dt)return msg('입고일을 입력하세요.');if(!exp)return msg('유효기간을 입력하세요.');
+ if(!(q>0))return msg('수량은 1 이상이어야 합니다.');
+ if(id==='_new'){const n=$('#i2').value.trim();if(!n)return msg('새 품목명을 입력하세요.');
+  const it={id:uid(),name:n,unit:$('#i3').value.trim()||'개'};S.items.push(it);id=it.id}
+ let lot=S.lots.find(l=>l.itemId===id&&l.exp===exp&&l.inDate===dt);
+ if(lot)lot.qty+=q;else{lot={id:uid(),itemId:id,qty:q,exp,inDate:dt,memo:$('#i7').value.trim()};S.lots.push(lot)}
+ S.logs.push({id:uid(),ts:now(),type:'in',itemId:id,lotId:lot.id,exp,d:q,date:dt,note:$('#i7').value.trim(),user:u,synced:false,voided:false});
+ save();msg('입고 저장 완료');go('stock');
+}
+const REASONS=['구급출동','교육·훈련','차량 보충','폐기(유효기간 만료)','기타'];
+function outView(){
+ const av=S.items.filter(i=>total(i.id)>0);
+ if(!av.length)return '<p class="mu">출고할 재고가 없습니다.</p>';
+ return `<label for="o1">품목</label><select id="o1" onchange="prev()">${av.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('')}</select>
+ <label for="o2">출고 수량</label><input id="o2" type="number" min="1" inputmode="numeric" oninput="prev()">
+ <label for="o3">사유</label><select id="o3" onchange="prev()">${REASONS.map(r=>`<option>${r}</option>`).join('')}</select>
+ <label for="o5">출고일</label><input id="o5" type="date" value="${ymd(new Date())}"><label for="o4">출고처 (차량·센터)</label><input id="o4" placeholder="예: 구급1호차">
+ <div id="pv"></div><button class="btn" onclick="doOut()">출고 저장</button>`;
+}
+function alloc(id,q,reason){
+ const disp=reason.startsWith('폐기');
+ const ls=lotsOf(id).filter(l=>disp?dleft(l.exp)<0:dleft(l.exp)>=0);
+ let r=q;const plan=[];
+ for(const l of ls){if(r<=0)break;const t=Math.min(l.qty,r);plan.push({l,t});r-=t}
+ return {plan,short:r,avail:ls.reduce((s,l)=>s+l.qty,0)};
+}
+function prev(){
+ const b=$('#pv');if(!b)return;const q=parseInt($('#o2').value,10);
+ if(!(q>0)){b.innerHTML='';return}
+ const a=alloc($('#o1').value,q,$('#o3').value);
+ b.innerHTML=a.short>0?`<div class="pv x">차감 가능한 재고가 ${a.avail}개뿐입니다. ${$('#o3').value.startsWith('폐기')?'폐기는 만료된 재고만 선택됩니다.':'만료된 재고는 일반 출고에서 제외됩니다.'}</div>`
+  :`<div class="pv">차감 예정 (유효기간 빠른 순)<br>${a.plan.map(x=>x.l.exp+' 입고분에서 '+x.t+'개').join('<br>')}</div>`;
+}
+function doOut(){
+ const u=user();if(!u)return;
+ const id=$('#o1').value,q=parseInt($('#o2').value,10),re=$('#o3').value;
+ if(!(q>0))return msg('수량은 1 이상이어야 합니다.');
+ const a=alloc(id,q,re);if(a.short>0)return msg('재고가 부족해 출고할 수 없습니다.');
+ const dest=$('#o4').value.trim(),dt=$('#o5').value;if(!dt)return msg('출고일을 입력하세요.');
+ a.plan.forEach(x=>{x.l.qty-=x.t;S.logs.push({id:uid(),ts:now(),type:'out',itemId:id,lotId:x.l.id,exp:x.l.exp,d:-x.t,date:dt,note:re+(dest?' / '+dest:''),user:u,synced:false,voided:false})});
+ save();msg('출고 저장 완료');go('stock');
+}
+function fix(id){
+ const u=user();if(!u)return;
+ const g=S.logs.find(x=>x.id===id);if(!g||g.voided||g.type==='fix')return;
+ const lot=S.lots.find(l=>l.id===g.lotId);
+ if(!confirm('이 기록을 정정(취소)할까요? 삭제되지 않고 반대 기록이 추가됩니다.'))return;
+ if(lot.qty-g.d<0)return msg('이미 출고되어 정정할 수 없습니다. 먼저 해당 출고를 정정하세요.');
+ lot.qty-=g.d;g.voided=true;
+ S.logs.push({id:uid(),ts:now(),type:'fix',itemId:g.itemId,lotId:g.lotId,exp:g.exp,d:-g.d,date:ymd(new Date()),note:'정정: '+g.ts+' 기록 취소',user:u,synced:false,voided:false});
+ save();render();
+}
+function sync(id,v){const g=S.logs.find(x=>x.id===id);if(g){g.synced=v;save();render()}}
+const TL={in:'입고',out:'출고',fix:'정정'};
+function hist(){
+ const ls=S.logs.slice().reverse().filter(g=>flt==='all'||(!g.synced&&g.type!=='fix'&&!g.voided));
+ return `<label for="hf">보기</label><select id="hf" onchange="flt=this.value;render()"><option value="all" ${flt==='all'?'selected':''}>전체 기록</option><option value="un" ${flt==='un'?'selected':''}>소방장비시스템 미입력만</option></select>
+ ${ls.map(g=>`<div class="card"><div class="row"><span class="${g.voided?'void':''}"><b>${esc(item(g.itemId).name)}</b> <span class="tag ${g.type==='in'?'t-ok':g.type==='out'?'t-wn':'t-er'}">${TL[g.type]}</span> <b>${g.d>0?'+':''}${g.d}</b></span>
+ ${g.type!=='fix'&&!g.voided?`<button class="btn s" onclick="fix('${g.id}')">정정</button>`:''}</div>
+ <div class="mu"><b>${g.type==='in'?'입고일':g.type==='out'?'출고일':'정정일'} ${dateOf(g)}</b> · 담당 <b>${esc(g.user)}</b> · 기록 ${g.ts.slice(5)} · 유효기간 ${g.exp}${g.note?' · '+esc(g.note):''}</div>
+ <label style="margin:6px 0 0;display:flex;gap:6px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:18px;min-height:0" ${g.synced?'checked':''} onchange="sync('${g.id}',this.checked)">소방장비시스템 입력 완료</label></div>`).join('')||'<p class="mu">기록이 없습니다.</p>'}`;
+}
+function rows(){return S.logs.filter(g=>dateOf(g)>=rf&&dateOf(g)<=rt)}
+function expView(){
+ const r=rows();
+ const tsv=['거래일(입고일·출고일)\t기록시각\t구분\t품목\t유효기간\t수량변동\t비고\t담당자\t시스템입력'].concat(r.map(g=>[dateOf(g),g.ts,TL[g.type],item(g.itemId).name,g.exp,g.d,g.note||'',g.user,g.synced?'완료':'미입력'].join('\t'))).join('\n');
+ return `<div class="row" style="gap:8px"><div style="flex:1"><label for="e1">시작일</label><input id="e1" type="date" value="${rf}" onchange="rf=this.value;render()"></div><div style="flex:1"><label for="e2">종료일</label><input id="e2" type="date" value="${rt}" onchange="rt=this.value;render()"></div></div>
+ <p class="mu">조회된 기록 ${r.length}건 · 미입력 ${r.filter(g=>!g.synced).length}건 · 마지막 현행화 ${S.lastSync||'기록 없음'}</p>
+ <textarea id="tx" readonly aria-label="엑셀 붙여넣기용 데이터">${esc(tsv)}</textarea>
+ <button class="btn" onclick="cp()">복사하기 (엑셀에 붙여넣기)</button>
+ <button class="btn" style="background:var(--ok);color:var(--acx)" onclick="markAll()">조회 기간 전체를 시스템 입력 완료로 표시</button>`;
+}
+function cp(){const t=$('#tx');t.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}msg(ok?'복사했습니다. 엑셀에 붙여넣으세요.':'선택된 내용을 직접 복사(Ctrl+C)하세요.')}
+function markAll(){if(!confirm('조회 기간의 모든 기록을 입력 완료로 표시할까요?'))return;rows().forEach(g=>g.synced=true);S.lastSync=ymd(new Date());save();render()}
+function render(){
+ $('#n').innerHTML=TABS.map(t=>`<button class="${t[0]===tab?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
+ $('#v').innerHTML={stock,in:inView,out:outView,hist,exp:expView}[tab]();
+ $('#u').value=S.user||'';window.scrollTo(0,0);
+}
+$('#u').addEventListener('change',e=>{S.user=e.target.value.trim();save()});
+render();
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(function(){});
+</script></body></html>
