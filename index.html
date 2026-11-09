@@ -134,16 +134,17 @@ function stock(){
  <p class="mu">같은 품목도 유효기간이 다르면 따로 관리합니다. 출고는 유효기간이 빠른 것부터 자동 차감됩니다.</p>
  <button class="btn s" onclick="if(confirm('모든 품목과 기록을 삭제할까요? 되돌릴 수 없습니다.')){S=seed();save();render()}">전체 데이터 삭제</button>`;
 }
-let ph=null,pendKey='',phMsg='';
+let ph=null,phCv=null,pendKey='',phMsg='';
 const loadJs=s=>new Promise((ok,no)=>{const e=document.createElement('script');e.src=s;e.onload=ok;e.onerror=no;document.head.appendChild(e)});
 function photoBox(){
  return `<div class="card"><b>📷 사진으로 입력</b><div class="mu">바코드·QR 또는 포장의 유효기간 글자를 찍으면 입력칸에 채워 줍니다. 사진은 저장하지 않으며, 결과는 꼭 확인하세요.</div>
  <input id="ph" type="file" accept="image/*" capture="environment" hidden onchange="onPhoto(this.files[0])">
  <button class="btn" onclick="$('#ph').click()">사진 찍기</button><div id="phr">${phHtml()}</div></div>`;
 }
+const rectCss=r=>r?`display:block;left:${r.x0*100}%;top:${r.y0*100}%;width:${(r.x1-r.x0)*100}%;height:${(r.y1-r.y0)*100}%`:'display:none';
 function phHtml(){
  if(!ph)return phMsg?`<div class="pv">${esc(phMsg)}</div>`:'';
- const im=ph.url?`<img src="${ph.url}" alt="촬영한 사진" style="max-width:100%;border-radius:6px;margin-top:10px">`:'';
+ const im=ph.url?`<div id="phw" style="position:relative;touch-action:none;margin-top:10px;line-height:0"><img src="${ph.url}" alt="촬영한 사진" style="width:100%;border-radius:6px;display:block"><div id="phs" style="position:absolute;pointer-events:none;border:2px solid #c8312b;background:rgba(200,49,43,.18);${rectCss(ph.rect)}"></div></div>`:'';
  if(ph.busy)return im+`<p class="mu">${esc(ph.st)}</p>`;
  const nm=ph.item?esc(item(ph.item).name):ph.newName?'새 품목 · '+esc(ph.newName):'미선택 (아래에서 고르거나 직접 선택)';
  let pick='';
@@ -153,23 +154,25 @@ function phHtml(){
   if(pick)pick='<div class="mu" style="margin-top:8px">비슷한 품목 / 읽은 글자 중 고르세요</div>'+pick;
  }
  const tx=ph.text?`<details style="margin-top:8px"><summary class="mu">읽은 글자 전체 보기</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(ph.text)}</pre></details>`:'';
- return im+`<div class="pv${ph.code||ph.exp||ph.item?'':' x'}">바코드: ${esc(ph.code||'인식 안 됨')}<br>품목: ${nm}<br>유효기간: ${esc(ph.exp||'인식 안 됨')}${ph.note?'<br>'+esc(ph.note):''}</div>${pick}${tx}
+ return im+`<div class="mu" style="margin-top:6px">제품명이 인식되지 않으면 사진에서 제품명 부분을 손가락으로 드래그해 감싼 뒤 아래 버튼을 누르세요.</div>
+ <button class="btn s" style="width:100%;margin-top:8px;min-height:44px" onclick="phRegion()">선택한 부분 다시 읽기</button>
+ <div class="pv${ph.code||ph.exp||ph.item?'':' x'}">바코드: ${esc(ph.code||'인식 안 됨')}<br>품목: ${nm}<br>유효기간: ${esc(ph.exp||'인식 안 됨')}${ph.note?'<br>'+esc(ph.note):''}</div>${pick}${tx}
  <button class="btn" onclick="phUse()">이 사진 사용</button><button class="btn s" style="width:100%;margin-top:10px;min-height:44px" onclick="phNo()">사용 안 함 (다시 찍기)</button>`;
 }
 const phDraw=()=>{const b=$('#phr');if(b)b.innerHTML=phHtml()};
 async function onPhoto(f){
  if(!f)return;
- phMsg='';ph={busy:true,st:'사진을 불러오는 중…',url:'',code:'',exp:'',item:'',note:'',key:'',text:'',cands:[],lines:[],newName:''};phDraw();
+ phMsg='';ph={busy:true,st:'사진을 불러오는 중…',url:'',code:'',exp:'',item:'',note:'',key:'',text:'',cands:[],lines:[],newName:'',rect:null};phDraw();
  try{
   const bm=await createImageBitmap(f),k=Math.min(1,1600/Math.max(bm.width,bm.height));
   const cv=document.createElement('canvas');cv.width=Math.round(bm.width*k);cv.height=Math.round(bm.height*k);
   cv.getContext('2d').drawImage(bm,0,0,cv.width,cv.height);
-  ph.url=cv.toDataURL('image/jpeg',.7);ph.st='바코드 확인 중…';phDraw();
+  phCv=cv;ph.url=cv.toDataURL('image/jpeg',.7);ph.st='바코드 확인 중…';phDraw();
   const raw=await readCode(cv);
   if(raw){const g=gs1(raw);ph.code=g.gtin||raw;ph.key=g.gtin||raw;ph.exp=g.exp;ph.item=(S.codes||{})[ph.key]||'';
    if(!ph.item)ph.note='처음 보는 바코드입니다. 품목을 선택해 저장하면 다음부터 자동으로 인식됩니다.'}
   if(!ph.item||!ph.exp){ph.st='글자 인식 중… (처음에는 한글 데이터를 내려받느라 1~2분 걸릴 수 있어요)';phDraw();
-   try{const t=await ocr(cv);ph.text=t.trim();
+   try{const t=(await ocrRun(passesFull(cv),(i,n)=>{ph.st='글자 인식 중 ('+i+'/'+n+')… 처음에는 한글 데이터를 내려받느라 오래 걸릴 수 있어요';phDraw()})).join('\n');ph.text=t.trim();
     if(!ph.exp){const r=pickDate(t);ph.exp=r.d;if(r.n)ph.note=(ph.note?ph.note+' ':'')+r.n}
     if(!ph.item){const m=matchName(t);ph.item=m.best;ph.cands=m.cands;ph.lines=nameLines(t)}}
    catch(e){ph.note=(ph.note?ph.note+' ':'')+'글자 인식을 불러오지 못했습니다. 인터넷 연결을 확인하거나 직접 입력하세요.'}}
@@ -188,12 +191,30 @@ function gs1(t){
  if(!m||!n){const q=t.replace(/[^0-9]/g,'').match(/01(\d{14})17(\d{6})/);if(q){m=m||[0,q[1]];n=n||[0,q[2]]}}
  return {gtin:m?m[1]:'',exp:n?yy2d(n[1]):''};
 }
-async function ocr(cv){
+function prep(src,w,mode){
+ const c=document.createElement('canvas');c.width=Math.max(100,Math.round(w));c.height=Math.max(20,Math.round(src.height*c.width/src.width));
+ const x=c.getContext('2d');x.filter='grayscale(1) contrast(1.4)';x.drawImage(src,0,0,c.width,c.height);x.filter='none';
+ if(mode==='g')return c;
+ const d=x.getImageData(0,0,c.width,c.height),a=d.data,n=a.length/4,hs=new Array(256).fill(0),gr=new Uint8Array(n);
+ for(let i=0;i<n;i++){const v=(a[4*i]*.299+a[4*i+1]*.587+a[4*i+2]*.114)|0;gr[i]=v;hs[v]++}
+ let sum=0;for(let i=0;i<256;i++)sum+=i*hs[i];
+ let sb=0,wb=0,mx=0,th=127;
+ for(let t=0;t<256;t++){wb+=hs[t];if(!wb)continue;const wf=n-wb;if(!wf)break;sb+=t*hs[t];const mb=sb/wb,mf=(sum-sb)/wf,v=wb*wf*(mb-mf)*(mb-mf);if(v>mx){mx=v;th=t}}
+ for(let i=0;i<n;i++){let b=gr[i]>th?255:0;if(mode==='inv')b=255-b;a[4*i]=a[4*i+1]=a[4*i+2]=b;a[4*i+3]=255}
+ x.putImageData(d,0,0);return c;
+}
+// 큰 글자는 줄여서, 작은 글자는 그대로 읽도록 크기와 전처리를 바꿔 여러 번 읽습니다.
+const passesFull=s=>[[1,'g'],[.5,'g'],[.5,'bin'],[.5,'inv'],[.3,'bin']].map(([r,m])=>prep(s,s.width*r,m));
+const passesCrop=s=>[[1000,'g'],[600,'bin'],[600,'inv'],[360,'bin']].map(([w,m])=>prep(s,w,m));
+async function ocrRun(cvs,onp){
  if(!window.Tesseract)await loadJs('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
- const g=document.createElement('canvas');g.width=cv.width;g.height=cv.height;
- const x=g.getContext('2d');x.filter='grayscale(1) contrast(1.5)';x.drawImage(cv,0,0);
- const w=await Tesseract.createWorker('kor+eng');
- try{const r=await Promise.race([w.recognize(g),new Promise((_,no)=>setTimeout(()=>no(new Error('t')),150000))]);return r.data.text}finally{w.terminate()}
+ const w=await Tesseract.createWorker('kor+eng'),out=[];
+ try{try{await w.setParameters({tessedit_pageseg_mode:'11'})}catch(e){}
+  for(let i=0;i<cvs.length;i++){if(onp)onp(i+1,cvs.length);
+   try{const r=await Promise.race([w.recognize(cvs[i]),new Promise((_,no)=>setTimeout(()=>no(new Error('t')),60000))]);out.push(r.data.text)}catch(e){}}
+  if(!out.length)throw new Error('ocr');
+  return out;
+ }finally{w.terminate()}
 }
 const nz=s=>s.toLowerCase().replace(/[^0-9a-z가-힣]/g,'');
 function matchName(t){
@@ -202,7 +223,11 @@ function matchName(t){
   return {id:i.id,s:bg.filter(b=>T.includes(b)).length/bg.length}}).sort((a,b)=>b.s-a.s);
  return {best:sc.length&&sc[0].s>=.8?sc[0].id:'',cands:sc.filter(x=>x.s>=.6).slice(0,3).map(x=>x.id)};
 }
-const nameLines=t=>t.split('\n').map(x=>x.replace(/([가-힣])\s+(?=[가-힣])/g,'$1').replace(/[^0-9A-Za-z가-힣 ()·.\-]/g,'').trim()).filter(x=>/[가-힣]{2,}/.test(x)&&x.length>=3).sort((a,b)=>b.length-a.length).slice(0,3);
+const nameLines=t=>{const seen={},o=[];
+ t.split('\n').forEach(x=>{x=x.replace(/([가-힣])\s+(?=[가-힣])/g,'$1').replace(/[^0-9A-Za-z가-힣 ()·.\-]/g,'').trim();
+  const k=nz(x),hg=(x.match(/[가-힣]/g)||[]).length;
+  if(hg>=2&&x.length>=3&&x.length<=30&&hg/x.replace(/\s/g,'').length>=.6&&!seen[k]){seen[k]=1;o.push([hg,x])}});
+ return o.sort((a,b)=>b[0]-a[0]).slice(0,4).map(a=>a[1])};
 function phPick(id){if(ph){ph.item=id;ph.newName='';phDraw()}}
 function phNew(i){if(ph){ph.newName=ph.lines[i]||'';ph.item='';phDraw()}}
 function pickDate(s){
@@ -226,7 +251,29 @@ function phUse(){
  phMsg='사진 결과를 입력칸에 채웠습니다. 내용을 확인한 뒤 입고 저장을 누르세요.'+(ph.item||ph.newName?'':' 품목은 직접 선택해 주세요.');
  ph=null;phDraw();$('#i1').scrollIntoView({block:'center'});
 }
-function phNo(){ph=null;pendKey='';phMsg='';const f=$('#ph');if(f)f.value='';phDraw()}
+(()=>{let st=null;
+ const pt=e=>{const w=$('#phw');if(!w)return null;const b=w.getBoundingClientRect();return {x:Math.min(1,Math.max(0,(e.clientX-b.left)/b.width)),y:Math.min(1,Math.max(0,(e.clientY-b.top)/b.height))}};
+ const rc=(a,b)=>({x0:Math.min(a.x,b.x),y0:Math.min(a.y,b.y),x1:Math.max(a.x,b.x),y1:Math.max(a.y,b.y)});
+ document.addEventListener('pointerdown',e=>{if(!ph||ph.busy||!e.target.closest||!e.target.closest('#phw'))return;st=pt(e)});
+ document.addEventListener('pointermove',e=>{if(!st||!ph)return;const p=pt(e);if(!p)return;ph.rect=rc(st,p);const s=$('#phs');if(s)s.style.cssText='position:absolute;pointer-events:none;border:2px solid #c8312b;background:rgba(200,49,43,.18);'+rectCss(ph.rect)});
+ const up=()=>{if(st&&ph&&ph.rect&&(ph.rect.x1-ph.rect.x0<.03||ph.rect.y1-ph.rect.y0<.02)){ph.rect=null;const s=$('#phs');if(s)s.style.display='none'}st=null};
+ document.addEventListener('pointerup',up);document.addEventListener('pointercancel',up);
+})();
+async function phRegion(){
+ if(!ph||!phCv)return;
+ if(!ph.rect)return msg('사진에서 제품명 부분을 손가락으로 드래그해 감싼 뒤 눌러 주세요.');
+ const r=ph.rect,sx=Math.round(r.x0*phCv.width),sy=Math.round(r.y0*phCv.height),sw=Math.max(20,Math.round((r.x1-r.x0)*phCv.width)),sh=Math.max(20,Math.round((r.y1-r.y0)*phCv.height));
+ const cr=document.createElement('canvas');cr.width=sw;cr.height=sh;cr.getContext('2d').drawImage(phCv,sx,sy,sw,sh,0,0,sw,sh);
+ const keep=ph.rect;ph.busy=true;ph.st='선택한 부분 읽는 중…';phDraw();
+ try{const t=(await ocrRun(passesCrop(cr))).join('\n'),m=matchName(t);
+  ph.text=(ph.text?ph.text+'\n--- 선택 부분 ---\n':'')+t.trim();
+  ph.cands=m.cands;ph.lines=nameLines(t);if(m.best){ph.item=m.best;ph.newName=''}else{ph.item='';ph.newName=''}
+  if(!ph.exp){const d=pickDate(t);if(d.d)ph.exp=d.d}
+  ph.note=(m.best||ph.lines.length)?'':'선택한 부분에서 글자를 찾지 못했습니다. 범위를 조금 넓히거나 다시 찍어 보세요.'}
+ catch(e){ph.note='선택한 부분을 읽지 못했습니다.'}
+ ph.busy=false;ph.rect=keep;phDraw();
+}
+function phNo(){ph=null;phCv=null;pendKey='';phMsg='';const f=$('#ph');if(f)f.value='';phDraw()}
 function inView(){
  return photoBox()+`<label for="i1">품목</label><select id="i1" onchange="$('#nw').style.display=this.value==='_new'?'block':'none'">${S.items.map(i=>`<option value="${i.id}">${esc(i.name)} (${esc(i.unit)})</option>`).join('')}<option value="_new">+ 새 품목 등록</option></select>
  <div id="nw" style="display:${S.items.length?'none':'block'}"><label for="i2">새 품목명</label><input id="i2"><label for="i3">단위 (예: 개, 장)</label><input id="i3" value="개"></div>
