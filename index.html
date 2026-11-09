@@ -145,13 +145,21 @@ function phHtml(){
  if(!ph)return phMsg?`<div class="pv">${esc(phMsg)}</div>`:'';
  const im=ph.url?`<img src="${ph.url}" alt="촬영한 사진" style="max-width:100%;border-radius:6px;margin-top:10px">`:'';
  if(ph.busy)return im+`<p class="mu">${esc(ph.st)}</p>`;
- return im+`<div class="pv${ph.code||ph.exp?'':' x'}">바코드: ${esc(ph.code||'인식 안 됨')}<br>품목: ${ph.item?esc(item(ph.item).name):'미등록 (직접 선택)'}<br>유효기간: ${esc(ph.exp||'인식 안 됨')}${ph.note?'<br>'+esc(ph.note):''}</div>
+ const nm=ph.item?esc(item(ph.item).name):ph.newName?'새 품목 · '+esc(ph.newName):'미선택 (아래에서 고르거나 직접 선택)';
+ let pick='';
+ if(!ph.item&&!ph.newName){
+  pick=(ph.cands||[]).map(id=>`<button class="btn s" style="margin:6px 6px 0 0" onclick="phPick('${id}')">${esc(item(id).name)}</button>`).join('')
+   +(ph.lines||[]).map((x,i)=>`<button class="btn s" style="margin:6px 6px 0 0" onclick="phNew(${i})">새 품목: ${esc(x)}</button>`).join('');
+  if(pick)pick='<div class="mu" style="margin-top:8px">비슷한 품목 / 읽은 글자 중 고르세요</div>'+pick;
+ }
+ const tx=ph.text?`<details style="margin-top:8px"><summary class="mu">읽은 글자 전체 보기</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(ph.text)}</pre></details>`:'';
+ return im+`<div class="pv${ph.code||ph.exp||ph.item?'':' x'}">바코드: ${esc(ph.code||'인식 안 됨')}<br>품목: ${nm}<br>유효기간: ${esc(ph.exp||'인식 안 됨')}${ph.note?'<br>'+esc(ph.note):''}</div>${pick}${tx}
  <button class="btn" onclick="phUse()">이 사진 사용</button><button class="btn s" style="width:100%;margin-top:10px;min-height:44px" onclick="phNo()">사용 안 함 (다시 찍기)</button>`;
 }
 const phDraw=()=>{const b=$('#phr');if(b)b.innerHTML=phHtml()};
 async function onPhoto(f){
  if(!f)return;
- phMsg='';ph={busy:true,st:'사진을 불러오는 중…',url:'',code:'',exp:'',item:'',note:'',key:''};phDraw();
+ phMsg='';ph={busy:true,st:'사진을 불러오는 중…',url:'',code:'',exp:'',item:'',note:'',key:'',text:'',cands:[],lines:[],newName:''};phDraw();
  try{
   const bm=await createImageBitmap(f),k=Math.min(1,1600/Math.max(bm.width,bm.height));
   const cv=document.createElement('canvas');cv.width=Math.round(bm.width*k);cv.height=Math.round(bm.height*k);
@@ -160,9 +168,11 @@ async function onPhoto(f){
   const raw=await readCode(cv);
   if(raw){const g=gs1(raw);ph.code=g.gtin||raw;ph.key=g.gtin||raw;ph.exp=g.exp;ph.item=(S.codes||{})[ph.key]||'';
    if(!ph.item)ph.note='처음 보는 바코드입니다. 품목을 선택해 저장하면 다음부터 자동으로 인식됩니다.'}
-  if(!ph.exp){ph.st='유효기간 글자 인식 중… (처음에는 1분 가까이 걸릴 수 있어요)';phDraw();
-   try{const r=pickDate(await ocr(cv));ph.exp=r.d;if(r.n)ph.note=(ph.note?ph.note+' ':'')+r.n}
-   catch(e){ph.note=(ph.note?ph.note+' ':'')+'글자 인식을 불러오지 못했습니다. 인터넷 연결을 확인하거나 날짜를 직접 입력하세요.'}}
+  if(!ph.item||!ph.exp){ph.st='글자 인식 중… (처음에는 한글 데이터를 내려받느라 1~2분 걸릴 수 있어요)';phDraw();
+   try{const t=await ocr(cv);ph.text=t.trim();
+    if(!ph.exp){const r=pickDate(t);ph.exp=r.d;if(r.n)ph.note=(ph.note?ph.note+' ':'')+r.n}
+    if(!ph.item){const m=matchName(t);ph.item=m.best;ph.cands=m.cands;ph.lines=nameLines(t)}}
+   catch(e){ph.note=(ph.note?ph.note+' ':'')+'글자 인식을 불러오지 못했습니다. 인터넷 연결을 확인하거나 직접 입력하세요.'}}
  }catch(e){ph.note='사진을 처리하지 못했습니다. 다시 찍어 주세요.'}
  ph.busy=false;phDraw();
 }
@@ -180,9 +190,21 @@ function gs1(t){
 }
 async function ocr(cv){
  if(!window.Tesseract)await loadJs('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
- const w=await Tesseract.createWorker('eng');
- try{const r=await Promise.race([w.recognize(cv),new Promise((_,no)=>setTimeout(()=>no(new Error('t')),90000))]);return r.data.text}finally{w.terminate()}
+ const g=document.createElement('canvas');g.width=cv.width;g.height=cv.height;
+ const x=g.getContext('2d');x.filter='grayscale(1) contrast(1.5)';x.drawImage(cv,0,0);
+ const w=await Tesseract.createWorker('kor+eng');
+ try{const r=await Promise.race([w.recognize(g),new Promise((_,no)=>setTimeout(()=>no(new Error('t')),150000))]);return r.data.text}finally{w.terminate()}
 }
+const nz=s=>s.toLowerCase().replace(/[^0-9a-z가-힣]/g,'');
+function matchName(t){
+ const T=nz(t),sc=S.items.map(i=>{const n=nz(i.name);if(!n)return {id:i.id,s:0};if(T.includes(n))return {id:i.id,s:1};
+  const bg=[];for(let k=0;k<n.length-1;k++)bg.push(n.slice(k,k+2));if(!bg.length)return {id:i.id,s:0};
+  return {id:i.id,s:bg.filter(b=>T.includes(b)).length/bg.length}}).sort((a,b)=>b.s-a.s);
+ return {best:sc.length&&sc[0].s>=.8?sc[0].id:'',cands:sc.filter(x=>x.s>=.6).slice(0,3).map(x=>x.id)};
+}
+const nameLines=t=>t.split('\n').map(x=>x.replace(/([가-힣])\s+(?=[가-힣])/g,'$1').replace(/[^0-9A-Za-z가-힣 ()·.\-]/g,'').trim()).filter(x=>/[가-힣]{2,}/.test(x)&&x.length>=3).sort((a,b)=>b.length-a.length).slice(0,3);
+function phPick(id){if(ph){ph.item=id;ph.newName='';phDraw()}}
+function phNew(i){if(ph){ph.newName=ph.lines[i]||'';ph.item='';phDraw()}}
 function pickDate(s){
  const find=x0=>{const x=x0.replace(/[Oo]/g,'0'),o=[],eom=(y,m)=>y+'-'+p2(m)+'-'+p2(new Date(y,m,0).getDate());let m;
   const a=/(20\d{2})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})/g;while(m=a.exec(x))if(+m[2]>=1&&+m[2]<=12&&+m[3]>=1&&+m[3]<=31)o.push(m[1]+'-'+p2(+m[2])+'-'+p2(+m[3]));
@@ -198,9 +220,10 @@ function pickDate(s){
 function phUse(){
  if(!ph)return;
  if(ph.item){$('#i1').value=ph.item;$('#nw').style.display='none'}
+ else if(ph.newName){$('#i1').value='_new';$('#nw').style.display='block';$('#i2').value=ph.newName}
  if(ph.exp)$('#i5').value=ph.exp;
  pendKey=ph.key||'';
- phMsg='사진 결과를 입력칸에 채웠습니다. 내용을 확인한 뒤 입고 저장을 누르세요.'+(ph.item?'':' 품목은 직접 선택해 주세요.');
+ phMsg='사진 결과를 입력칸에 채웠습니다. 내용을 확인한 뒤 입고 저장을 누르세요.'+(ph.item||ph.newName?'':' 품목은 직접 선택해 주세요.');
  ph=null;phDraw();$('#i1').scrollIntoView({block:'center'});
 }
 function phNo(){ph=null;pendKey='';phMsg='';const f=$('#ph');if(f)f.value='';phDraw()}
