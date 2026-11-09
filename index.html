@@ -139,7 +139,7 @@ const loadJs=s=>new Promise((ok,no)=>{const e=document.createElement('script');e
 function photoBox(){
  return `<div class="card"><b>📷 사진으로 입력</b><div class="mu">바코드·QR 또는 포장의 유효기간 글자를 찍으면 입력칸에 채워 줍니다. 사진은 저장하지 않으며, 결과는 꼭 확인하세요.</div>
  <input id="ph" type="file" accept="image/*" capture="environment" hidden onchange="onPhoto(this.files[0])">
- <button class="btn" onclick="$('#ph').click()">사진 찍기</button><div id="phr">${phHtml()}</div></div>`;
+ <button class="btn" onclick="$('#ph').click()">사진 찍기</button><div id="phr">${phHtml()}</div>${gemBox()}</div>`;
 }
 const rectCss=r=>r?`display:block;left:${r.x0*100}%;top:${r.y0*100}%;width:${(r.x1-r.x0)*100}%;height:${(r.y1-r.y0)*100}%`:'display:none';
 function phHtml(){
@@ -172,7 +172,7 @@ async function onPhoto(f){
   if(raw){const g=gs1(raw);ph.code=g.gtin||raw;ph.key=g.gtin||raw;ph.exp=g.exp;ph.item=(S.codes||{})[ph.key]||'';
    if(!ph.item)ph.note='처음 보는 바코드입니다. 품목을 선택해 저장하면 다음부터 자동으로 인식됩니다.'}
   if(!ph.item||!ph.exp){ph.st='글자 인식 중… (처음에는 한글 데이터를 내려받느라 1~2분 걸릴 수 있어요)';phDraw();
-   try{const t=(await ocrRun(passesFull(cv),(i,n)=>{ph.st='글자 인식 중 ('+i+'/'+n+')… 처음에는 한글 데이터를 내려받느라 오래 걸릴 수 있어요';phDraw()})).join('\n');ph.text=t.trim();
+   try{const t=await getText(cv,(i,n)=>{ph.st=n?'글자 인식 중 ('+i+'/'+n+')… 처음에는 한글 데이터를 내려받느라 오래 걸릴 수 있어요':'AI가 사진을 읽는 중…';phDraw()},()=>passesFull(cv));ph.text=t.trim();
     if(!ph.exp){const r=pickDate(t);ph.exp=r.d;if(r.n)ph.note=(ph.note?ph.note+' ':'')+r.n}
     if(!ph.item){const m=matchName(t);ph.item=m.best;ph.cands=m.cands;ph.lines=nameLines(t)}}
    catch(e){ph.note=(ph.note?ph.note+' ':'')+'글자 인식을 불러오지 못했습니다. 인터넷 연결을 확인하거나 직접 입력하세요.'}}
@@ -259,13 +259,46 @@ function phUse(){
  const up=()=>{if(st&&ph&&ph.rect&&(ph.rect.x1-ph.rect.x0<.03||ph.rect.y1-ph.rect.y0<.02)){ph.rect=null;const s=$('#phs');if(s)s.style.display='none'}st=null};
  document.addEventListener('pointerup',up);document.addEventListener('pointercancel',up);
 })();
+const GPROMPT='이 사진은 구급·의료 소모품 포장입니다. 포장에 인쇄된 정보만 읽어 JSON으로만 답하세요. 키: product_name(가장 크게 인쇄된 제품명, 없으면 null), expiry(유효기간. YYYY-MM-DD 형식이고 일이 없으면 그 달 말일, 없으면 null), lot(로트번호, 없으면 null). 보이지 않는 값은 추측하지 말고 null로 하세요.';
+const gemCfg=()=>{try{return JSON.parse(localStorage.getItem('emsGem')||'{}')}catch(e){return {}}};
+function gemBox(){const c=gemCfg();
+ return `<details style="margin-top:10px"><summary class="mu">AI 인식 설정 (Gemini)</summary>
+ <label for="gk">API 키</label><input id="gk" type="password" autocomplete="off" value="${esc(c.key||'')}" onchange="gemSave()">
+ <label for="gm">모델 이름</label><input id="gm" value="${esc(c.model||'gemini-flash-latest')}" onchange="gemSave()">
+ <label style="display:flex;gap:8px;align-items:center;color:var(--tx)"><input id="go" type="checkbox" style="width:18px;min-height:0" ${c.on?'checked':''} onchange="gemSave()">Gemini AI로 사진 읽기 사용</label>
+ <button class="btn s" style="margin-top:10px" onclick="gemTest()">연결 시험</button>
+ <p class="mu">키는 이 폰의 브라우저에만 저장되고 앱 코드에는 들어가지 않습니다. 사용하면 사진이 Google 서버로 전송됩니다. 혼자 시험할 때만 쓰세요.</p></details>`}
+function gemSave(){try{localStorage.setItem('emsGem',JSON.stringify({key:$('#gk').value.trim(),model:$('#gm').value.trim(),on:$('#go').checked}))}catch(e){}}
+async function gcall(parts,json){
+ const c=gemCfg();if(!c.key)throw new Error('API 키가 없습니다');
+ const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),45000);
+ try{const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(c.model||'gemini-flash-latest')+':generateContent',{method:'POST',signal:ac.signal,headers:{'Content-Type':'application/json','x-goog-api-key':c.key},
+   body:JSON.stringify({contents:[{parts}],generationConfig:Object.assign({temperature:0},json?{responseMimeType:'application/json'}:{})})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error((j.error&&j.error.message)||('HTTP '+r.status));
+  const p=(((j.candidates||[])[0]||{}).content||{}).parts||[];return p.map(x=>x.text||'').join('')}
+ finally{clearTimeout(tm)}
+}
+async function gemini(cv){
+ const k=Math.min(1,1280/Math.max(cv.width,cv.height)),o=document.createElement('canvas');
+ o.width=Math.round(cv.width*k);o.height=Math.round(cv.height*k);o.getContext('2d').drawImage(cv,0,0,o.width,o.height);
+ const tx=await gcall([{inline_data:{mime_type:'image/jpeg',data:o.toDataURL('image/jpeg',.85).split(',')[1]}},{text:GPROMPT}],true);
+ const d=JSON.parse(tx.replace(/```json|```/g,'').trim());
+ return (d.product_name||'')+'\n유효기간 '+(d.expiry||'')+'\n'+(d.lot?'LOT '+d.lot:'');
+}
+async function getText(cv,onp,passes){
+ const c=gemCfg();
+ if(c.on&&c.key){try{if(onp)onp(0,0);return await gemini(cv)}catch(e){ph.note=((ph.note||'')+' AI 인식 실패('+String(e.message).slice(0,90)+') → 기본 글자 인식으로 대신 읽습니다.').trim()}}
+ return (await ocrRun(passes(),onp)).join('\n');
+}
+async function gemTest(){gemSave();try{await gcall([{text:'ping. OK라고만 답하세요.'}],false);msg('연결 성공: 키와 모델 이름이 맞습니다.')}catch(e){msg('연결 실패: '+e.message)}}
 async function phRegion(){
  if(!ph||!phCv)return;
  if(!ph.rect)return msg('사진에서 제품명 부분을 손가락으로 드래그해 감싼 뒤 눌러 주세요.');
  const r=ph.rect,sx=Math.round(r.x0*phCv.width),sy=Math.round(r.y0*phCv.height),sw=Math.max(20,Math.round((r.x1-r.x0)*phCv.width)),sh=Math.max(20,Math.round((r.y1-r.y0)*phCv.height));
  const cr=document.createElement('canvas');cr.width=sw;cr.height=sh;cr.getContext('2d').drawImage(phCv,sx,sy,sw,sh,0,0,sw,sh);
  const keep=ph.rect;ph.busy=true;ph.st='선택한 부분 읽는 중…';phDraw();
- try{const t=(await ocrRun(passesCrop(cr))).join('\n'),m=matchName(t);
+ try{const t=await getText(cr,null,()=>passesCrop(cr)),m=matchName(t);
   ph.text=(ph.text?ph.text+'\n--- 선택 부분 ---\n':'')+t.trim();
   ph.cands=m.cands;ph.lines=nameLines(t);if(m.best){ph.item=m.best;ph.newName=''}else{ph.item='';ph.newName=''}
   if(!ph.exp){const d=pickDate(t);if(d.d)ph.exp=d.d}
