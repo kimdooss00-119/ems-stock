@@ -178,7 +178,7 @@ async function onPhoto(f){
    if(!ph.item)ph.note='처음 보는 바코드입니다. 품목을 선택해 저장하면 다음부터 자동으로 인식됩니다.'}
   if(!ph.item||!ph.exp){ph.st='글자 인식 중… (처음에는 한글 데이터를 내려받느라 1~2분 걸릴 수 있어요)';phDraw();
    try{const t=await getText(cv,(i,n)=>{ph.st=n?'글자 인식 중 ('+i+'/'+n+')… 처음에는 한글 데이터를 내려받느라 오래 걸릴 수 있어요':'AI가 사진을 읽는 중…';phDraw()},()=>passesFull(cv),true);ph.text=t.trim();
-    if(!ph.exp){const r=pickDate(t);ph.exp=r.d;if(r.n)ph.note=(ph.note?ph.note+' ':'')+r.n}
+    if(!ph.exp){const r=pickDate(t);ph.exp=r.d;let n2=r.n;if(!r.d){const c=shelf(t);if(c){ph.exp=c.d;n2=c.n}}if(n2)ph.note=(ph.note?ph.note+' ':'')+n2}
     if(!ph.item){const mm=t.match(/MATCH (\S+)/);if(mm&&S.items.some(i=>i.id===mm[1])){ph.item=mm[1];ph.note=(ph.note?ph.note+' ':'')+'등록된 사진과 비교해 같은 품목으로 판단했습니다. 꼭 확인하세요.'}}
     if(!ph.item){const m=matchName(t);ph.item=m.best;ph.cands=m.cands;ph.lines=nameLines(t);if(gAI){const f=t.split('\n')[0].trim();if(f&&f!=='null'&&!ph.lines.includes(f))ph.lines.unshift(f)}}}
    catch(e){ph.note=(ph.note?ph.note+' ':'')+'글자 인식을 불러오지 못했습니다. 인터넷 연결을 확인하거나 직접 입력하세요.'}}
@@ -238,6 +238,18 @@ function phPick(id){if(ph&&id){ph.item=id;ph.newName='';ph.own=false;ph.reg=!ite
 function phOwn(){if(ph){ph.own=true;ph.item='';ph.newName='';ph.reg=true;phDraw()}}
 function phChg(){if(ph){ph.item='';ph.newName='';ph.own=false;phDraw()}}
 function phNew(i){if(ph){ph.newName=ph.lines[i]||'';ph.item='';ph.own=false;ph.reg=true;phDraw()}}
+function shelf(t){
+ const x=t.replace(/[Oo]/g,'0');
+ const m=x.match(/(?:제조일자|제조년월일|제조일|제조|MFG|MFD)[^\d]{0,12}(20\d{2})\s*[-./년]\s*(\d{1,2})(?:\s*[-./월]\s*(\d{1,2}))?/i);
+ const g=x.match(/(?:기간|제조일로부터|제조일\s*기준|제조\s*후|제조일부터)[^\d]{0,12}(\d{1,2})\s*(년|개월|months?|years?|yrs?)/i)||x.match(/(\d{1,2})\s*(년|개월)\s*(?:간|까지)/);
+ if(!m||!g)return null;
+ let n=+g[1];if(/년|y/i.test(g[2]))n*=12;
+ if(!(n>0&&n<=120))return null;
+ const y=+m[1],mo=+m[2],d=m[3]?+m[3]:1;
+ if(mo<1||mo>12)return null;
+ const dd=Math.min(d,new Date(y,mo+n,0).getDate()),e=new Date(y,mo-1+n,dd);e.setDate(e.getDate()-1);
+ return {d:ymd(e),n:'제조일 '+y+'-'+p2(mo)+(m[3]?'-'+p2(d):'')+' + '+n+'개월로 계산했습니다'+(m[3]?'':' (제조일에 일이 없어 1일로 가정)')+'. 제품에 따라 하루 정도 차이날 수 있으니 포장 표기와 꼭 확인하세요.'};
+}
 function pickDate(s){
  const find=x0=>{const x=x0.replace(/[Oo]/g,'0'),o=[],eom=(y,m)=>y+'-'+p2(m)+'-'+p2(new Date(y,m,0).getDate());let m;
   const a=/(20\d{2})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})/g;while(m=a.exec(x))if(+m[2]>=1&&+m[2]<=12&&+m[3]>=1&&+m[3]<=31)o.push(m[1]+'-'+p2(+m[2])+'-'+p2(+m[3]));
@@ -246,7 +258,7 @@ function pickDate(s){
   return o};
  const k=s.match(/(EXP|USE\s*BY|BEST\s*BEFORE|유효|사용기한|만료)[\s\S]{0,40}/i);
  if(k){const r=find(k[0]);if(r.length)return {d:r[0],n:'유효기간 표시 근처의 날짜를 읽었습니다. 꼭 확인하세요.'}}
- const all=find(s).sort();
+ const all=find(s.replace(/(제조일자|제조년월일|제조일|제조|MFG|MFD|Manufactur\w*)[^\n]{0,25}/gi,' ')).sort();
  if(all.length)return {d:all[all.length-1],n:all.length>1?'여러 날짜 중 가장 늦은 날짜를 골랐습니다. 꼭 확인하세요.':'꼭 확인하세요.'};
  return {d:'',n:'날짜를 찾지 못했습니다. 직접 입력하세요.'};
 }
@@ -268,7 +280,7 @@ function phUse(){
  const up=()=>{if(st&&ph&&ph.rect&&(ph.rect.x1-ph.rect.x0<.03||ph.rect.y1-ph.rect.y0<.02)){ph.rect=null;const s=$('#phs');if(s)s.style.display='none'}st=null};
  document.addEventListener('pointerup',up);document.addEventListener('pointercancel',up);
 })();
-const GPROMPT='이 사진은 구급·의료 소모품 포장입니다. 포장에 인쇄된 정보만 읽어 JSON으로만 답하세요. 키: product_name(가장 크게 인쇄된 제품명, 없으면 null), expiry(유효기간. YYYY-MM-DD 형식이고 일이 없으면 그 달 말일, 없으면 null), lot(로트번호, 없으면 null). 보이지 않는 값은 추측하지 말고 null로 하세요.';
+const GPROMPT='이 사진은 구급·의료 소모품 포장입니다. 포장에 인쇄된 정보만 읽어 JSON으로만 답하세요. 키: product_name(가장 크게 인쇄된 제품명, 없으면 null), expiry(유효기간 날짜가 직접 인쇄된 경우에만. YYYY-MM-DD 형식이고 일이 없으면 그 달 말일, 없으면 null. 제조일로부터 기간으로만 적혀 있으면 계산하지 말고 null), manufacture_date(제조일자. YYYY-MM-DD, 일이 없으면 YYYY-MM, 없으면 null), shelf_life_months(유효기간이 “제조일로부터 N년” 또는 “N개월”처럼 기간으로 적혀 있으면 개월 수 숫자(1년=12), 없으면 null), lot(로트번호, 없으면 null). 보이지 않는 값은 추측하지 말고 null로 하세요.';
 const gemCfg=()=>{try{return JSON.parse(localStorage.getItem('emsGem')||'{}')}catch(e){return {}}};
 function gemBox(){const c=gemCfg();
  return `<details style="margin-top:10px"><summary class="mu">AI 인식 설정 (Gemini)</summary>
@@ -314,7 +326,7 @@ async function gemini(cv,refs){
  parts.push({inline_data:{mime_type:'image/jpeg',data:o.toDataURL('image/jpeg',.85).split(',')[1]}});
  parts.push({text:GPROMPT+(rf.length?' 또한 matched_item_id: 새 사진의 제품이 위 등록 품목 중 같은 제품(같은 종류, 같은 브랜드·규격)이면 그 품목 ID를, 확실하지 않거나 없으면 null을 넣으세요.':'')});
  const d=JSON.parse((await gcall(parts,true)).replace(/```json|```/g,'').trim());
- return (d.product_name||'')+'\n유효기간 '+(d.expiry||'')+'\n'+(d.lot?'LOT '+d.lot:'')+(d.matched_item_id?'\nMATCH '+d.matched_item_id:'');
+ return (d.product_name||'')+(d.expiry?'\n유효기간 '+d.expiry:'')+(d.manufacture_date?'\n제조일 '+d.manufacture_date:'')+(d.shelf_life_months?'\n기간 '+d.shelf_life_months+'개월':'')+(d.lot?'\nLOT '+d.lot:'')+(d.matched_item_id?'\nMATCH '+d.matched_item_id:'');
 }
 async function getText(cv,onp,passes,refs){
  gAI=false;const c=gemCfg();
@@ -331,8 +343,8 @@ async function phRegion(){
  try{const t=await getText(cr,null,()=>passesCrop(cr)),m=matchName(t);
   ph.text=(ph.text?ph.text+'\n--- 선택 부분 ---\n':'')+t.trim();
   ph.cands=m.cands;ph.lines=nameLines(t);if(gAI){const f=t.split('\n')[0].trim();if(f&&f!=='null'&&!ph.lines.includes(f))ph.lines.unshift(f)}if(m.best){ph.item=m.best;ph.newName=''}else{ph.item='';ph.newName=''}
-  if(!ph.exp){const d=pickDate(t);if(d.d)ph.exp=d.d}
-  ph.note=(m.best||ph.lines.length)?'':'선택한 부분에서 글자를 찾지 못했습니다. 범위를 조금 넓히거나 다시 찍어 보세요.'}
+  if(!ph.exp){const d=pickDate(t);if(d.d)ph.exp=d.d;else{const c=shelf(t);if(c){ph.exp=c.d;ph.cn=c.n}}}
+  ph.note=((m.best||ph.lines.length)?'':'선택한 부분에서 글자를 찾지 못했습니다. 범위를 조금 넓히거나 다시 찍어 보세요.')+(ph.cn?' '+ph.cn:'');ph.cn=''}
  catch(e){ph.note='선택한 부분을 읽지 못했습니다.'}
  ph.busy=false;ph.rect=keep;phDraw();
 }
