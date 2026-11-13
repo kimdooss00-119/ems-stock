@@ -148,13 +148,15 @@ function phHtml(){
  if(!ph)return phMsg?`<div class="pv">${esc(phMsg)}</div>`:'';
  const im=ph.url?`<div id="phw" style="position:relative;touch-action:none;margin-top:10px;line-height:0"><img src="${ph.url}" alt="촬영한 사진" style="width:100%;border-radius:6px;display:block"><div id="phs" style="position:absolute;pointer-events:none;border:2px solid #c8312b;background:rgba(200,49,43,.18);${rectCss(ph.rect)}"></div></div>`:'';
  if(ph.busy)return im+`<p class="mu">${esc(ph.st)}</p>`;
- const nm=ph.item?esc(item(ph.item).name):ph.newName?'새 품목 · '+esc(ph.newName):'미선택 (아래에서 고르거나 직접 선택)';
+ const nm=ph.item?esc(item(ph.item).name):ph.newName?'새 품목 · '+esc(ph.newName):ph.own?'새 품목 (이름은 입력칸에 직접 입력)':'미선택 (아래에서 골라 주세요)';
  let pick='';
- if(!ph.item&&!ph.newName){
-  pick=(ph.cands||[]).map(id=>`<button class="btn s" style="margin:6px 6px 0 0" onclick="phPick('${id}')">${esc(item(id).name)}</button>`).join('')
-   +(ph.lines||[]).map((x,i)=>`<button class="btn s" style="margin:6px 6px 0 0" onclick="phNew(${i})">새 품목: ${esc(x)}</button>`).join('');
-  if(pick)pick='<div class="mu" style="margin-top:8px">비슷한 품목 / 읽은 글자 중 고르세요</div>'+pick;
- }
+ if(!ph.item&&!ph.newName&&!ph.own){
+  pick='<div class="mu" style="margin-top:8px">품목을 골라 주세요</div>'
+   +(ph.cands||[]).map(id=>`<button class="btn s" style="margin:6px 6px 0 0" onclick="phPick('${id}')">${esc(item(id).name)}</button>`).join('')
+   +(ph.lines||[]).map((x,i)=>`<button class="btn s" style="margin:6px 6px 0 0" onclick="phNew(${i})">새 품목: ${esc(x)}</button>`).join('')
+   +(S.items.length?`<select style="margin-top:8px" onchange="phPick(this.value)"><option value="">등록된 품목에서 고르기…</option>${S.items.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('')}</select>`:'')
+   +'<button class="btn s" style="margin:8px 0 0" onclick="phOwn()">새 품목으로 직접 입력</button>';
+ }else pick='<button class="btn s" style="margin-top:8px" onclick="phChg()">품목 다시 고르기</button>';
  const tx=ph.text?`<details style="margin-top:8px"><summary class="mu">읽은 글자 전체 보기</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(ph.text)}</pre></details>`:'';
  return im+`<div class="mu" style="margin-top:6px">제품명이 인식되지 않으면 사진에서 제품명 부분을 손가락으로 드래그해 감싼 뒤 아래 버튼을 누르세요.</div>
  <button class="btn s" style="width:100%;margin-top:8px;min-height:44px" onclick="phRegion()">선택한 부분 다시 읽기</button>
@@ -165,7 +167,7 @@ function phHtml(){
 const phDraw=()=>{const b=$('#phr');if(b)b.innerHTML=phHtml()};
 async function onPhoto(f){
  if(!f)return;
- phMsg='';ph={busy:true,st:'사진을 불러오는 중…',url:'',code:'',exp:'',item:'',note:'',key:'',text:'',cands:[],lines:[],newName:'',rect:null,th:'',reg:true};phDraw();
+ phMsg='';ph={busy:true,st:'사진을 불러오는 중…',url:'',code:'',exp:'',item:'',note:'',key:'',text:'',cands:[],lines:[],newName:'',rect:null,th:'',reg:true,own:false};phDraw();
  try{
   const bm=await createImageBitmap(f),k=Math.min(1,1600/Math.max(bm.width,bm.height));
   const cv=document.createElement('canvas');cv.width=Math.round(bm.width*k);cv.height=Math.round(bm.height*k);
@@ -178,7 +180,7 @@ async function onPhoto(f){
    try{const t=await getText(cv,(i,n)=>{ph.st=n?'글자 인식 중 ('+i+'/'+n+')… 처음에는 한글 데이터를 내려받느라 오래 걸릴 수 있어요':'AI가 사진을 읽는 중…';phDraw()},()=>passesFull(cv),true);ph.text=t.trim();
     if(!ph.exp){const r=pickDate(t);ph.exp=r.d;if(r.n)ph.note=(ph.note?ph.note+' ':'')+r.n}
     if(!ph.item){const mm=t.match(/MATCH (\S+)/);if(mm&&S.items.some(i=>i.id===mm[1])){ph.item=mm[1];ph.note=(ph.note?ph.note+' ':'')+'등록된 사진과 비교해 같은 품목으로 판단했습니다. 꼭 확인하세요.'}}
-    if(!ph.item){const m=matchName(t);ph.item=m.best;ph.cands=m.cands;ph.lines=nameLines(t)}}
+    if(!ph.item){const m=matchName(t);ph.item=m.best;ph.cands=m.cands;ph.lines=nameLines(t);if(gAI){const f=t.split('\n')[0].trim();if(f&&f!=='null'&&!ph.lines.includes(f))ph.lines.unshift(f)}}}
    catch(e){ph.note=(ph.note?ph.note+' ':'')+'글자 인식을 불러오지 못했습니다. 인터넷 연결을 확인하거나 직접 입력하세요.'}}
  }catch(e){ph.note='사진을 처리하지 못했습니다. 다시 찍어 주세요.'}
  ph.reg=!ph.item||!item(ph.item).img;ph.busy=false;phDraw();
@@ -232,8 +234,10 @@ const nameLines=t=>{const seen={},o=[];
   const k=nz(x),hg=(x.match(/[가-힣]/g)||[]).length;
   if(hg>=2&&x.length>=3&&x.length<=30&&hg/x.replace(/\s/g,'').length>=.6&&!seen[k]){seen[k]=1;o.push([hg,x])}});
  return o.sort((a,b)=>b[0]-a[0]).slice(0,4).map(a=>a[1])};
-function phPick(id){if(ph){ph.item=id;ph.newName='';ph.reg=!item(id).img;phDraw()}}
-function phNew(i){if(ph){ph.newName=ph.lines[i]||'';ph.item='';ph.reg=true;phDraw()}}
+function phPick(id){if(ph&&id){ph.item=id;ph.newName='';ph.own=false;ph.reg=!item(id).img;phDraw()}}
+function phOwn(){if(ph){ph.own=true;ph.item='';ph.newName='';ph.reg=true;phDraw()}}
+function phChg(){if(ph){ph.item='';ph.newName='';ph.own=false;phDraw()}}
+function phNew(i){if(ph){ph.newName=ph.lines[i]||'';ph.item='';ph.own=false;ph.reg=true;phDraw()}}
 function pickDate(s){
  const find=x0=>{const x=x0.replace(/[Oo]/g,'0'),o=[],eom=(y,m)=>y+'-'+p2(m)+'-'+p2(new Date(y,m,0).getDate());let m;
   const a=/(20\d{2})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})/g;while(m=a.exec(x))if(+m[2]>=1&&+m[2]<=12&&+m[3]>=1&&+m[3]<=31)o.push(m[1]+'-'+p2(+m[2])+'-'+p2(+m[3]));
@@ -250,9 +254,10 @@ function phUse(){
  if(!ph)return;
  if(ph.item){$('#i1').value=ph.item;$('#nw').style.display='none'}
  else if(ph.newName){$('#i1').value='_new';$('#nw').style.display='block';$('#i2').value=ph.newName}
+ else if(ph.own){$('#i1').value='_new';$('#nw').style.display='block'}
  if(ph.exp)$('#i5').value=ph.exp;
  pendKey=ph.key||'';pendImg=ph.reg?ph.th:'';
- phMsg='사진 결과를 입력칸에 채웠습니다. 내용을 확인한 뒤 입고 저장을 누르세요.'+(ph.item||ph.newName?'':' 품목은 직접 선택해 주세요.');
+ phMsg='사진 결과를 입력칸에 채웠습니다. 내용을 확인한 뒤 입고 저장을 누르세요.'+(ph.item||ph.newName||ph.own?'':' 품목은 직접 선택해 주세요.');
  ph=null;phDraw();$('#i1').scrollIntoView({block:'center'});
 }
 (()=>{let st=null;
@@ -273,7 +278,7 @@ function gemBox(){const c=gemCfg();
  <button class="btn s" style="margin-top:10px" onclick="gemTest()">연결 시험</button>
  <p class="mu">키는 이 폰의 브라우저에만 저장되고 앱 코드에는 들어가지 않습니다. 사용하면 사진이 Google 서버로 전송됩니다. 혼자 시험할 때만 쓰세요.</p></details>`}
 function gemSave(){try{localStorage.setItem('emsGem',JSON.stringify({key:$('#gk').value.trim(),model:$('#gm').value.trim(),on:$('#go').checked}))}catch(e){}}
-let gUsed='';
+let gUsed='',gAI=false;
 async function gone(model,parts,json,ms){
  const c=gemCfg(),ac=new AbortController(),tm=setTimeout(()=>ac.abort(),ms||45000);
  try{const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',signal:ac.signal,headers:{'Content-Type':'application/json','x-goog-api-key':c.key},
@@ -312,8 +317,8 @@ async function gemini(cv,refs){
  return (d.product_name||'')+'\n유효기간 '+(d.expiry||'')+'\n'+(d.lot?'LOT '+d.lot:'')+(d.matched_item_id?'\nMATCH '+d.matched_item_id:'');
 }
 async function getText(cv,onp,passes,refs){
- const c=gemCfg();
- if(c.on&&c.key){try{if(onp)onp(0,0);return await gemini(cv,refs)}catch(e){ph.note=((ph.note||'')+' AI 인식 실패('+String(e.message).slice(0,90)+') → 기본 글자 인식으로 대신 읽습니다.').trim()}}
+ gAI=false;const c=gemCfg();
+ if(c.on&&c.key){try{if(onp)onp(0,0);const r=await gemini(cv,refs);gAI=true;return r}catch(e){ph.note=((ph.note||'')+' AI 인식 실패('+String(e.message).slice(0,90)+') → 기본 글자 인식으로 대신 읽습니다.').trim()}}
  return (await ocrRun(passes(),onp)).join('\n');
 }
 async function gemTest(){gemSave();try{await gcall([{text:'ping. OK라고만 답하세요.'}],false,20000);msg('연결 성공: 키가 맞습니다. (사용된 모델: '+gUsed+')')}catch(e){msg('연결 실패: '+e.message)}}
@@ -325,7 +330,7 @@ async function phRegion(){
  const keep=ph.rect;ph.busy=true;ph.st='선택한 부분 읽는 중…';phDraw();
  try{const t=await getText(cr,null,()=>passesCrop(cr)),m=matchName(t);
   ph.text=(ph.text?ph.text+'\n--- 선택 부분 ---\n':'')+t.trim();
-  ph.cands=m.cands;ph.lines=nameLines(t);if(m.best){ph.item=m.best;ph.newName=''}else{ph.item='';ph.newName=''}
+  ph.cands=m.cands;ph.lines=nameLines(t);if(gAI){const f=t.split('\n')[0].trim();if(f&&f!=='null'&&!ph.lines.includes(f))ph.lines.unshift(f)}if(m.best){ph.item=m.best;ph.newName=''}else{ph.item='';ph.newName=''}
   if(!ph.exp){const d=pickDate(t);if(d.d)ph.exp=d.d}
   ph.note=(m.best||ph.lines.length)?'':'선택한 부분에서 글자를 찾지 못했습니다. 범위를 조금 넓히거나 다시 찍어 보세요.'}
  catch(e){ph.note='선택한 부분을 읽지 못했습니다.'}
