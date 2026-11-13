@@ -269,15 +269,32 @@ function gemBox(){const c=gemCfg();
  <button class="btn s" style="margin-top:10px" onclick="gemTest()">연결 시험</button>
  <p class="mu">키는 이 폰의 브라우저에만 저장되고 앱 코드에는 들어가지 않습니다. 사용하면 사진이 Google 서버로 전송됩니다. 혼자 시험할 때만 쓰세요.</p></details>`}
 function gemSave(){try{localStorage.setItem('emsGem',JSON.stringify({key:$('#gk').value.trim(),model:$('#gm').value.trim(),on:$('#go').checked}))}catch(e){}}
-async function gcall(parts,json){
- const c=gemCfg();if(!c.key)throw new Error('API 키가 없습니다');
- const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),45000);
- try{const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(c.model||'gemini-flash-latest')+':generateContent',{method:'POST',signal:ac.signal,headers:{'Content-Type':'application/json','x-goog-api-key':c.key},
+let gUsed='';
+async function gone(model,parts,json,ms){
+ const c=gemCfg(),ac=new AbortController(),tm=setTimeout(()=>ac.abort(),ms||45000);
+ try{const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',signal:ac.signal,headers:{'Content-Type':'application/json','x-goog-api-key':c.key},
    body:JSON.stringify({contents:[{parts}],generationConfig:Object.assign({temperature:0},json?{responseMimeType:'application/json'}:{})})});
   const j=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error((j.error&&j.error.message)||('HTTP '+r.status));
+  if(!r.ok){const e=new Error((j.error&&j.error.message)||('HTTP '+r.status));e.st=r.status;throw e}
+  gUsed=model;
   const p=(((j.candidates||[])[0]||{}).content||{}).parts||[];return p.map(x=>x.text||'').join('')}
+ catch(e){if(e&&e.name==='AbortError')throw new Error('응답 시간 초과 — Google 서버에 연결되지 않습니다 (네트워크·방화벽·접속 환경 확인)');if(e&&e.name==='TypeError')throw new Error('연결이 차단되었습니다 (네트워크·방화벽·브라우저 보안 확인): '+e.message);throw e}
  finally{clearTimeout(tm)}
+}
+// 서버가 붐비거나(503/429) 모델이 없으면 잠시 뒤 다시 시도하고, 그래도 안 되면 다른 모델로 넘어갑니다.
+async function gcall(parts,json,ms){
+ const c=gemCfg();if(!c.key)throw new Error('API 키가 없습니다');
+ const ml=[c.model||'gemini-flash-latest','gemini-2.5-flash','gemini-flash-lite-latest'].filter((m,i,a)=>a.indexOf(m)===i);
+ let last=null;
+ for(const m of ml){
+  for(let t=0;t<2;t++){
+   try{return await gone(m,parts,json,ms)}
+   catch(e){last=e;
+    const busy=e.st===503||e.st===429||e.st===500||/high demand|overloaded|unavailable/i.test(e.message);
+    if(e.st===404)break;
+    if(!busy)throw e;
+    if(t===0)await new Promise(r=>setTimeout(r,2500))}}}
+ throw last;
 }
 async function gemini(cv){
  const k=Math.min(1,1280/Math.max(cv.width,cv.height)),o=document.createElement('canvas');
@@ -291,7 +308,7 @@ async function getText(cv,onp,passes){
  if(c.on&&c.key){try{if(onp)onp(0,0);return await gemini(cv)}catch(e){ph.note=((ph.note||'')+' AI 인식 실패('+String(e.message).slice(0,90)+') → 기본 글자 인식으로 대신 읽습니다.').trim()}}
  return (await ocrRun(passes(),onp)).join('\n');
 }
-async function gemTest(){gemSave();try{await gcall([{text:'ping. OK라고만 답하세요.'}],false);msg('연결 성공: 키와 모델 이름이 맞습니다.')}catch(e){msg('연결 실패: '+e.message)}}
+async function gemTest(){gemSave();try{await gcall([{text:'ping. OK라고만 답하세요.'}],false,20000);msg('연결 성공: 키가 맞습니다. (사용된 모델: '+gUsed+')')}catch(e){msg('연결 실패: '+e.message)}}
 async function phRegion(){
  if(!ph||!phCv)return;
  if(!ph.rect)return msg('사진에서 제품명 부분을 손가락으로 드래그해 감싼 뒤 눌러 주세요.');
