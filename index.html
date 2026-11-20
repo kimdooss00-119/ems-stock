@@ -135,18 +135,22 @@ function stock(){
  <p class="mu">같은 품목도 입고일·유효기간이 다르면 따로 관리하며, 출고할 때 어느 입고분에서 뺄지 직접 선택합니다.</p>
  <button class="btn s" onclick="if(confirm('모든 품목과 기록을 삭제할까요? 되돌릴 수 없습니다.')){S=seed();save();render()}">전체 데이터 삭제</button>`;
 }
-let ph=null,phCv=null,pendKey='',pendImg='',phMsg='';
+let ph=null,phCv=null,pendKey='',pendImg='',phMsg='',phAdd=false,phOnly='';
+function phExpOnly(){const v=$('#psel').value;if(!v)return msg('먼저 품목을 선택하세요.');phAdd=false;phOnly=v;$('#ph').click()}
 function mkThumb(cv){const k=Math.min(1,256/Math.max(cv.width,cv.height)),c=document.createElement('canvas');c.width=Math.round(cv.width*k);c.height=Math.round(cv.height*k);c.getContext('2d').drawImage(cv,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.6)}
 const loadJs=s=>new Promise((ok,no)=>{const e=document.createElement('script');e.src=s;e.onload=ok;e.onerror=no;document.head.appendChild(e)});
 function photoBox(){
  return `<div class="card"><b>📷 사진으로 입력</b><div class="mu">바코드·QR 또는 포장의 유효기간 글자를 찍으면 입력칸에 채워 줍니다. 사진은 저장하지 않으며, 결과는 꼭 확인하세요.</div>
  <input id="ph" type="file" accept="image/*" capture="environment" hidden onchange="onPhoto(this.files[0])">
- <button class="btn" onclick="$('#ph').click()">사진 찍기</button><div id="phr">${phHtml()}</div>${gemBox()}</div>`;
+ <button class="btn" onclick="phAdd=false;phOnly='';$('#ph').click()">사진 찍기</button>
+ <div class="mu" style="margin-top:12px">이미 등록된 품목은 유효기간이 적힌 면만 찍어도 됩니다.</div>
+ ${S.items.length?`<div class="row" style="gap:8px;margin-top:6px"><select id="psel" style="flex:1"><option value="">품목 선택…</option>${S.items.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('')}</select><button class="btn s" style="min-height:44px" onclick="phExpOnly()">유효기간 면만 찍기</button></div>`:''}<div id="phr">${phHtml()}</div>${gemBox()}</div>`;
 }
 const rectCss=r=>r?`display:block;left:${r.x0*100}%;top:${r.y0*100}%;width:${(r.x1-r.x0)*100}%;height:${(r.y1-r.y0)*100}%`:'display:none';
 function phHtml(){
  if(!ph)return phMsg?`<div class="pv">${esc(phMsg)}</div>`:'';
- const im=ph.url?`<div id="phw" style="position:relative;touch-action:none;margin-top:10px;line-height:0"><img src="${ph.url}" alt="촬영한 사진" style="width:100%;border-radius:6px;display:block"><div id="phs" style="position:absolute;pointer-events:none;border:2px solid #c8312b;background:rgba(200,49,43,.18);${rectCss(ph.rect)}"></div></div>`:'';
+ const sh=ph.prev&&ph.prev.length?'<div style="display:flex;gap:6px;margin-top:10px">'+ph.prev.map(u=>`<img src="${u}" alt="이전 사진" style="width:56px;height:56px;object-fit:cover;border-radius:6px">`).join('')+'</div><div class="mu">이전 사진 '+ph.prev.length+'장 + 방금 찍은 사진</div>':'';
+ const im=sh+(ph.url?`<div id="phw" style="position:relative;touch-action:none;margin-top:10px;line-height:0"><img src="${ph.url}" alt="촬영한 사진" style="width:100%;border-radius:6px;display:block"><div id="phs" style="position:absolute;pointer-events:none;border:2px solid #c8312b;background:rgba(200,49,43,.18);${rectCss(ph.rect)}"></div></div>`:'');
  if(ph.busy)return im+`<p class="mu">${esc(ph.st)}</p>`;
  const nm=ph.item?esc(item(ph.item).name):ph.newName?'새 품목 · '+esc(ph.newName):ph.own?'새 품목 (이름은 입력칸에 직접 입력)':'미선택 (아래에서 골라 주세요)';
  let pick='';
@@ -160,6 +164,8 @@ function phHtml(){
  const tx=ph.text?`<details style="margin-top:8px"><summary class="mu">읽은 글자 전체 보기</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(ph.text)}</pre></details>`:'';
  return im+`<div class="mu" style="margin-top:6px">제품명이 인식되지 않으면 사진에서 제품명 부분을 손가락으로 드래그해 감싼 뒤 아래 버튼을 누르세요.</div>
  <button class="btn s" style="width:100%;margin-top:8px;min-height:44px" onclick="phRegion()">선택한 부분 다시 읽기</button>
+ <button class="btn s" style="width:100%;margin-top:8px;min-height:44px" onclick="phAdd=true;$('#ph').click()">+ 사진 추가 (다른 면 찍기)</button>
+ <div class="mu" style="margin-top:4px">품명과 유효기간이 다른 면에 있으면 이어서 찍으세요. 이미 읽은 항목은 유지하고 빈 항목만 채웁니다.</div>
  <div class="pv${ph.code||ph.exp||ph.item?'':' x'}">바코드: ${esc(ph.code||'인식 안 됨')}<br>품목: ${nm}<br>유효기간: ${esc(ph.exp||'인식 안 됨')}${ph.note?'<br>'+esc(ph.note):''}</div>${pick}${tx}
  <label style="display:flex;gap:8px;align-items:center;margin:12px 0 0;color:var(--tx)"><input type="checkbox" style="width:20px;min-height:0" ${ph.reg?'checked':''} onchange="ph.reg=this.checked">이 사진을 품목 대표사진으로 등록</label>
  <button class="btn" onclick="phUse()">이 사진 사용</button><button class="btn s" style="width:100%;margin-top:10px;min-height:44px" onclick="phNo()">사용 안 함 (다시 찍기)</button>`;
@@ -167,23 +173,32 @@ function phHtml(){
 const phDraw=()=>{const b=$('#phr');if(b)b.innerHTML=phHtml()};
 async function onPhoto(f){
  if(!f)return;
- phMsg='';ph={busy:true,st:'사진을 불러오는 중…',url:'',code:'',exp:'',item:'',note:'',key:'',text:'',cands:[],lines:[],newName:'',rect:null,th:'',reg:true,own:false};phDraw();
+ const add=phAdd&&ph&&!ph.busy,only=phOnly;phAdd=false;phOnly='';phMsg='';
+ if(add){ph.busy=true;ph.st='사진을 불러오는 중…';ph.prev=(ph.prev||[]).concat(ph.url?[ph.url]:[]);ph.n=(ph.n||1)+1}
+ else ph={busy:true,st:'사진을 불러오는 중…',url:'',code:'',exp:'',item:only||'',pre:only,note:'',key:'',text:'',cands:[],lines:[],newName:'',rect:null,th:'',reg:!only,own:false,prev:[],n:1};
+ phDraw();
  try{
   const bm=await createImageBitmap(f),k=Math.min(1,1600/Math.max(bm.width,bm.height));
   const cv=document.createElement('canvas');cv.width=Math.round(bm.width*k);cv.height=Math.round(bm.height*k);
   cv.getContext('2d').drawImage(bm,0,0,cv.width,cv.height);
-  phCv=cv;ph.th=mkThumb(cv);ph.url=cv.toDataURL('image/jpeg',.7);ph.st='바코드 확인 중…';phDraw();
-  const raw=await readCode(cv);
-  if(raw){const g=gs1(raw);ph.code=g.gtin||raw;ph.key=g.gtin||raw;ph.exp=g.exp;ph.item=(S.codes||{})[ph.key]||'';
-   if(!ph.item)ph.note='처음 보는 바코드입니다. 품목을 선택해 저장하면 다음부터 자동으로 인식됩니다.'}
+  phCv=cv;if(!ph.th)ph.th=mkThumb(cv);ph.url=cv.toDataURL('image/jpeg',.7);ph.st='바코드 확인 중…';phDraw();
+  if(!ph.code){
+   const raw=await readCode(cv);
+   if(raw){const g=gs1(raw),mp=(S.codes||{})[g.gtin||raw]||'';ph.code=g.gtin||raw;ph.key=ph.code;if(g.exp&&!ph.exp)ph.exp=g.exp;
+    if(ph.pre){ph.item=ph.pre;if(mp&&mp!==ph.pre)ph.note='주의: 이 바코드는 “'+item(mp).name+'”로 등록되어 있습니다. 품목이 맞는지 확인하세요.'}
+    else if(!ph.item){ph.item=mp;if(!mp)ph.note='처음 보는 바코드입니다. 품목을 선택해 저장하면 다음부터 자동으로 인식됩니다.'}}}
   if(!ph.item||!ph.exp){ph.st='글자 인식 중… (처음에는 한글 데이터를 내려받느라 1~2분 걸릴 수 있어요)';phDraw();
-   try{const t=await getText(cv,(i,n)=>{ph.st=n?'글자 인식 중 ('+i+'/'+n+')… 처음에는 한글 데이터를 내려받느라 오래 걸릴 수 있어요':'AI가 사진을 읽는 중…';phDraw()},()=>passesFull(cv),true);ph.text=t.trim();
+   try{const t=await getText(cv,(i,n)=>{ph.st=n?'글자 인식 중 ('+i+'/'+n+')… 처음에는 한글 데이터를 내려받느라 오래 걸릴 수 있어요':'AI가 사진을 읽는 중…';phDraw()},()=>passesFull(cv),!ph.item,ph.item?'exp':'');
+    ph.text=(ph.text?ph.text+'\n--- 사진 '+ph.n+' ---\n':'')+t.trim();
     if(!ph.exp){const r=pickDate(t);ph.exp=r.d;let n2=r.n;if(!r.d){const c=shelf(t);if(c){ph.exp=c.d;n2=c.n}}if(n2)ph.note=(ph.note?ph.note+' ':'')+n2}
     if(!ph.item){const mm=t.match(/MATCH (\S+)/);if(mm&&S.items.some(i=>i.id===mm[1])){ph.item=mm[1];ph.note=(ph.note?ph.note+' ':'')+'등록된 사진과 비교해 같은 품목으로 판단했습니다. 꼭 확인하세요.'}}
-    if(!ph.item){const m=matchName(t);ph.item=m.best;ph.cands=m.cands;ph.lines=nameLines(t);if(gAI){const f=t.split('\n')[0].trim();if(f&&f!=='null'&&!ph.lines.includes(f))ph.lines.unshift(f)}}}
+    if(!ph.item){const m=matchName(t),ln=nameLines(t);ph.item=m.best;
+     if(gAI){const f1=t.split('\n')[0].trim();if(f1&&f1!=='null'&&!ln.includes(f1))ln.unshift(f1)}
+     ph.cands=[...new Set((ph.cands||[]).concat(m.cands))];ph.lines=[...new Set((ph.lines||[]).concat(ln))].slice(0,6)}}
    catch(e){ph.note=(ph.note?ph.note+' ':'')+'글자 인식을 불러오지 못했습니다. 인터넷 연결을 확인하거나 직접 입력하세요.'}}
  }catch(e){ph.note='사진을 처리하지 못했습니다. 다시 찍어 주세요.'}
- ph.reg=!ph.item||!item(ph.item).img;ph.busy=false;phDraw();
+ if(!add&&!only)ph.reg=!ph.item||!item(ph.item).img;
+ ph.busy=false;phDraw();const fi=$('#ph');if(fi)fi.value='';
 }
 async function readCode(cv){
  try{if('BarcodeDetector' in window){const r=await new BarcodeDetector().detect(cv);if(r.length)return r[0].rawValue}}catch(e){}
@@ -281,6 +296,7 @@ function phUse(){
  document.addEventListener('pointerup',up);document.addEventListener('pointercancel',up);
 })();
 const GPROMPT='이 사진은 구급·의료 소모품 포장입니다. 포장에 인쇄된 정보만 읽어 JSON으로만 답하세요. 키: product_name(가장 크게 인쇄된 제품명, 없으면 null), expiry(유효기간 날짜가 직접 인쇄된 경우에만. YYYY-MM-DD 형식이고 일이 없으면 그 달 말일, 없으면 null. 제조일로부터 기간으로만 적혀 있으면 계산하지 말고 null), manufacture_date(제조일자. YYYY-MM-DD, 일이 없으면 YYYY-MM, 없으면 null), shelf_life_months(유효기간이 “제조일로부터 N년” 또는 “N개월”처럼 기간으로 적혀 있으면 개월 수 숫자(1년=12), 없으면 null), lot(로트번호, 없으면 null). 보이지 않는 값은 추측하지 말고 null로 하세요.';
+const GPROMPT_EXP='이 사진은 구급·의료 소모품 포장의 일부입니다. 포장에 인쇄된 정보만 읽어 JSON으로만 답하세요. 키: expiry(유효기간 날짜가 직접 인쇄된 경우에만. YYYY-MM-DD 형식이고 일이 없으면 그 달 말일, 없으면 null. 제조일로부터 기간으로만 적혀 있으면 계산하지 말고 null), manufacture_date(제조일자. YYYY-MM-DD, 일이 없으면 YYYY-MM, 없으면 null), shelf_life_months(유효기간이 “제조일로부터 N년” 또는 “N개월”처럼 기간으로 적혀 있으면 개월 수 숫자(1년=12), 없으면 null), lot(로트번호, 없으면 null). 보이지 않는 값은 추측하지 말고 null로 하세요.';
 const gemCfg=()=>{try{return JSON.parse(localStorage.getItem('emsGem')||'{}')}catch(e){return {}}};
 function gemBox(){const c=gemCfg();
  return `<details style="margin-top:10px"><summary class="mu">AI 인식 설정 (Gemini)</summary>
@@ -317,20 +333,20 @@ async function gcall(parts,json,ms){
     if(t===0)await new Promise(r=>setTimeout(r,2500))}}}
  throw last;
 }
-async function gemini(cv,refs){
+async function gemini(cv,refs,mode){
  const k=Math.min(1,1280/Math.max(cv.width,cv.height)),o=document.createElement('canvas');
  o.width=Math.round(cv.width*k);o.height=Math.round(cv.height*k);o.getContext('2d').drawImage(cv,0,0,o.width,o.height);
- const rf=refs?S.items.filter(i=>i.img).slice(0,20):[],parts=[];
+ const rf=refs&&mode!=='exp'?S.items.filter(i=>i.img).slice(0,20):[],parts=[];
  rf.forEach(i=>{parts.push({text:'등록 품목 ID '+i.id+' / 이름 '+i.name+':'});parts.push({inline_data:{mime_type:'image/jpeg',data:i.img.split(',')[1]}})});
  parts.push({text:rf.length?'아래가 새로 찍은 사진입니다.':'아래 사진을 읽으세요.'});
  parts.push({inline_data:{mime_type:'image/jpeg',data:o.toDataURL('image/jpeg',.85).split(',')[1]}});
- parts.push({text:GPROMPT+(rf.length?' 또한 matched_item_id: 새 사진의 제품이 위 등록 품목 중 같은 제품(같은 종류, 같은 브랜드·규격)이면 그 품목 ID를, 확실하지 않거나 없으면 null을 넣으세요.':'')});
+ parts.push({text:(mode==='exp'?GPROMPT_EXP:GPROMPT)+(rf.length?' 또한 matched_item_id: 새 사진의 제품이 위 등록 품목 중 같은 제품(같은 종류, 같은 브랜드·규격)이면 그 품목 ID를, 확실하지 않거나 없으면 null을 넣으세요.':'')});
  const d=JSON.parse((await gcall(parts,true)).replace(/```json|```/g,'').trim());
  return (d.product_name||'')+(d.expiry?'\n유효기간 '+d.expiry:'')+(d.manufacture_date?'\n제조일 '+d.manufacture_date:'')+(d.shelf_life_months?'\n기간 '+d.shelf_life_months+'개월':'')+(d.lot?'\nLOT '+d.lot:'')+(d.matched_item_id?'\nMATCH '+d.matched_item_id:'');
 }
-async function getText(cv,onp,passes,refs){
+async function getText(cv,onp,passes,refs,mode){
  gAI=false;const c=gemCfg();
- if(c.on&&c.key){try{if(onp)onp(0,0);const r=await gemini(cv,refs);gAI=true;return r}catch(e){ph.note=((ph.note||'')+' AI 인식 실패('+String(e.message).slice(0,90)+') → 기본 글자 인식으로 대신 읽습니다.').trim()}}
+ if(c.on&&c.key){try{if(onp)onp(0,0);const r=await gemini(cv,refs,mode);gAI=true;return r}catch(e){ph.note=((ph.note||'')+' AI 인식 실패('+String(e.message).slice(0,90)+') → 기본 글자 인식으로 대신 읽습니다.').trim()}}
  return (await ocrRun(passes(),onp)).join('\n');
 }
 async function gemTest(){gemSave();try{await gcall([{text:'ping. OK라고만 답하세요.'}],false,20000);msg('연결 성공: 키가 맞습니다. (사용된 모델: '+gUsed+')')}catch(e){msg('연결 실패: '+e.message)}}
@@ -348,7 +364,7 @@ async function phRegion(){
  catch(e){ph.note='선택한 부분을 읽지 못했습니다.'}
  ph.busy=false;ph.rect=keep;phDraw();
 }
-function phNo(){ph=null;phCv=null;pendKey='';pendImg='';phMsg='';const f=$('#ph');if(f)f.value='';phDraw()}
+function phNo(){ph=null;phCv=null;pendKey='';pendImg='';phAdd=false;phOnly='';phMsg='';const f=$('#ph');if(f)f.value='';phDraw()}
 function inView(){
  return photoBox()+`<label for="i1">품목</label><select id="i1" onchange="$('#nw').style.display=this.value==='_new'?'block':'none'">${S.items.map(i=>`<option value="${i.id}">${esc(i.name)} (${esc(i.unit)})</option>`).join('')}<option value="_new">+ 새 품목 등록</option></select>
  <div id="nw" style="display:${S.items.length?'none':'block'}"><label for="i2">새 품목명</label><input id="i2"><label for="i3">단위 (예: 개, 장)</label><input id="i3" value="개"></div>
