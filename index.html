@@ -137,7 +137,7 @@ const dateOf=g=>g.date||g.ts.slice(0,10);
 const lastOut=id=>{const a=S.logs.filter(g=>g.itemId===id&&g.type==='out'&&!g.voided).sort((x,y)=>dateOf(x)+x.ts<dateOf(y)+y.ts?-1:1).pop();return a?dateOf(a)+' (담당 '+esc(a.user)+')':'-'};
 const inUser=l=>{const g=S.logs.filter(x=>x.lotId===l.id&&x.type==='in'&&!x.voided).pop();return g?g.user:'-'};
 let tab='stock',flt='all',rf=addD(-30),rt=ymd(new Date());
-const TABS=[['stock','재고'],['in','입고'],['hist','이력'],['exp','엑셀']];
+const TABS=[['stock','재고'],['pend','배정 입고'],['in','입고'],['hist','이력'],['exp','엑셀']];
 function go(t){tab=t;ed=null;render()}
 function msg(t){alert(t)}
 function user(){const u=$('#u').value.trim();if(!u){msg('담당자 이름을 먼저 입력하세요.');$('#u').focus();return null}S.user=u;return u}
@@ -425,6 +425,28 @@ async function phRegion(){
  ph.busy=false;ph.rect=keep;phDraw();
 }
 function phNo(){ph=null;phCv=null;pendKey='';pendImg='';phAdd=false;phOnly='';phMsg='';const f=$('#ph');if(f)f.value='';phDraw()}
+const allocOf=id=>(S.allocs||[]).filter(a=>a.itemId===id).reduce((s,a)=>s+a.qty,0);
+const recOf=id=>S.lots.filter(l=>l.itemId===id).reduce((s,l)=>s+(l.rec==null?l.qty:l.rec),0);
+const pendList=()=>S.items.map(it=>({it,A:allocOf(it.id),R:recOf(it.id)})).filter(x=>x.A>x.R).map(x=>Object.assign(x,{left:x.A-x.R}));
+function pendView(){
+ const L=pendList();
+ return `<div class="card"><b>배정 입고</b><div class="mu">관리자가 배정한 품목과 수량이 자동으로 들어와 있습니다. 실제 받은 물품의 <b>유효기간만 입력</b>하고 입고를 누르세요. 수량이 다르면 고쳐서 입력하세요.</div>
+ <label for="pdt">입고일</label><input id="pdt" type="date" value="${ymd(new Date())}"></div>
+ ${L.map(x=>`<div class="card"><div class="row"><b>${dn(x.it)}</b><span class="mu">배정 ${x.A} · 입고 ${x.R}</span></div>
+ <div style="display:flex;gap:8px;margin-top:8px;align-items:end;flex-wrap:wrap"><div style="flex:1;min-width:90px"><label for="pq_${x.it.id}">수량</label><input id="pq_${x.it.id}" type="number" min="1" inputmode="numeric" value="${x.left}"></div>
+ <div style="flex:2;min-width:140px"><label for="pd_${x.it.id}">유효기간</label><input id="pd_${x.it.id}" type="date"></div>
+ <button class="btn" onclick="doPend('${x.it.id}')">입고</button></div></div>`).join('')||'<div class="card mu">입고할 배정 수량이 없습니다. 배정된 수량을 모두 입고했습니다.</div>'}
+ <p class="mu">배정 수량보다 나눠서 받았거나 유효기간이 다른 물품이면, 수량을 나눠서 같은 품목을 여러 번 입고하세요.</p>`}
+function doPend(id){
+ const u=user();if(!u)return;
+ const dt=$('#pdt').value,exp=$('#pd_'+id).value,q=parseInt($('#pq_'+id).value,10),it=item(id);
+ if(!dt)return msg('입고일을 입력하세요.');if(!exp)return msg('유효기간을 입력하세요.');if(!(q>0))return msg('수량은 1 이상이어야 합니다.');
+ const left=allocOf(id)-recOf(id);if(q>left&&!confirm('배정 남은 수량('+left+')보다 많습니다. 그래도 입고할까요?'))return;
+ let lot=S.lots.find(l=>l.itemId===id&&l.exp===exp&&l.inDate===dt);
+ if(lot){lot.rec=(lot.rec==null?lot.qty:lot.rec)+q;lot.qty+=q}else{lot={id:uid(),itemId:id,qty:q,rec:q,exp,inDate:dt,memo:''};S.lots.push(lot)}
+ S.logs.push({id:uid(),ts:now(),type:'in',itemId:id,lotId:lot.id,exp,d:q,date:dt,note:'배정 입고',user:u,synced:false,voided:false});
+ save();render();msg(it.name+' '+q+'개 입고 저장 완료');
+}
 function inView(){
  return photoBox()+`<label for="i1">품목</label><select id="i1" onchange="$('#nw').style.display=this.value==='_new'?'block':'none'">${S.items.map(i=>`<option value="${i.id}">${dn(i)} (${esc(i.unit)})</option>`).join('')}<option value="_new">+ 새 품목 등록</option></select>
  <div id="nw" style="display:${S.items.length?'none':'block'}"><label for="i2">새 품목명</label><input id="i2"><label for="i3">단위 (예: 개, 장)</label><input id="i3" value="개"></div>
@@ -517,8 +539,8 @@ function expView(){
 function cp(){const t=$('#tx');t.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}msg(ok?'복사했습니다. 엑셀에 붙여넣으세요.':'선택된 내용을 직접 복사(Ctrl+C)하세요.')}
 function markAll(){if(!confirm('조회 기간의 모든 기록을 입력 완료로 표시할까요?'))return;rows().forEach(g=>g.synced=true);S.lastSync=ymd(new Date());save();render()}
 function render(){
- $('#n').innerHTML=TABS.map(t=>`<button class="${t[0]===tab||(tab==='out'&&t[0]==='stock')?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
- csBox();$('#v').innerHTML=(CLOUD&&!['items','allocs','lots','logs'].every(Cloud.isReady))?'<div class="card mu">서버에서 데이터를 불러오는 중…</div>':{stock,in:inView,out:outView,hist,exp:expView}[tab]();
+ $('#n').innerHTML=TABS.map(t=>`<button class="${t[0]===tab||(tab==='out'&&t[0]==='stock')?'on':''}" onclick="go('${t[0]}')">${t[1]}${t[0]==='pend'&&pendList().length?`<span class="tag t-wn" style="margin-left:4px">${pendList().length}</span>`:''}</button>`).join('');
+ csBox();$('#v').innerHTML=(CLOUD&&!['items','allocs','lots','logs'].every(Cloud.isReady))?'<div class="card mu">서버에서 데이터를 불러오는 중…</div>':{stock,pend:pendView,in:inView,out:outView,hist,exp:expView}[tab]();
  if(tab==='out')outLots();$('#u').value=S.user||'';window.scrollTo(0,0);
 }
 $('#u').addEventListener('change',e=>{S.user=e.target.value.trim();save()});
@@ -552,9 +574,13 @@ function doLogin(){const e=$('#le').value.trim(),p=$('#lp').value;if(!e||!p)retu
 function doLogout(){if(confirm('로그아웃할까요?'))Cloud.logout().then(()=>location.reload())}
 function useLocal(){try{localStorage.setItem(MK,'local')}catch(e){}location.reload()}
 function goLogin(){try{localStorage.removeItem(MK)}catch(e){}location.reload()}
+let theme='auto';try{theme=localStorage.getItem('emsThemePhone')||'auto'}catch(e){}
+function applyTheme(){const r=document.documentElement;if(r&&r.setAttribute){if(theme==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',theme)}}
+function setTheme(t){theme=t;try{localStorage.setItem('emsThemePhone',t)}catch(e){}applyTheme();csBox()}
+const thBox=()=>`<span style="float:right;white-space:nowrap">${[['light','☀'],['dark','🌙'],['auto','자동']].map(a=>`<button class="btn s ${theme===a[0]?'on':''}" style="padding:2px 8px;min-height:28px${theme===a[0]?';border-color:var(--ac);color:var(--ac);font-weight:700':''}" onclick="setTheme('${a[0]}')" aria-label="화면 모드 ${a[0]}">${a[1]}</button>`).join(' ')}</span>`;
 function csBox(){const e=$('#cs');if(!e)return;
- e.innerHTML=CLOUD?`☁ ${esc(CNAME||'센터')} · ${esc(Cloud.email())} <button class="btn s" style="padding:2px 10px;min-height:28px" onclick="doLogout()">로그아웃</button>${Cloud.err?'<div style="color:var(--er)">'+esc(Cloud.err)+'</div>':''}`
- :`로컬 모드 (이 기기에만 저장) <button class="btn s" style="padding:2px 10px;min-height:28px" onclick="goLogin()">서버 로그인</button>`}
-render();
+ e.innerHTML=thBox()+(CLOUD?`☁ ${esc(CNAME||'센터')} · ${esc(Cloud.email())} <button class="btn s" style="padding:2px 10px;min-height:28px" onclick="doLogout()">로그아웃</button>${Cloud.err?'<div style="color:var(--er)">'+esc(Cloud.err)+'</div>':''}`
+ :`로컬 모드 (이 기기에만 저장) <button class="btn s" style="padding:2px 10px;min-height:28px" onclick="goLogin()">서버 로그인</button>`)}
+applyTheme();render();
 if(MODE!=='local'){lg('');if(!Cloud.init('phone'))lg('서버 연결 도구를 불러오지 못했습니다. 인터넷 연결을 확인하거나 로컬 모드를 사용하세요.');else Cloud.onAuth(afterAuth)}
 </script></body></html>
