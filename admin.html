@@ -211,7 +211,7 @@ function dash(){
  const sch=curCats.length>1?`<div class="row" style="gap:6px"><span class="mu">시트</span><button class="btn s ${!vs?'on':''}" onclick="setVS(-1)">전체 (${inScope.length})</button>${curCats.map((c,k)=>`<button class="btn s ${vs===c?'on':''}" onclick="setVS(${k})">${esc(catLabel(c))} (${inScope.filter(i=>(i.cat||'__none')===c).length})</button>`).join('')}${vs?'<button class="btn s" style="margin-left:auto" onclick="renSheet()">시트 이름 변경</button>':''}</div>`:'';
  const finfo=f?`<div class="box" style="margin-bottom:10px"><div class="row" style="margin:0"><b>${esc(f.name)}</b><span class="mu">업로드 ${esc(f.date)} · 이 보기는 이 파일의 배정 수량만 보여줍니다. 수령·재고는 품목 기준이라 “총 합계”에서 확인하세요.</span><button class="btn s" style="margin-left:auto" onclick="renFile()">파일 이름 변경</button><button class="btn s" onclick="delFile()">이 파일 배정 삭제</button></div></div>`:'';
  const w1=Math.max(8,Math.ceil(Math.max(0,...S.items.map(i=>vis(i.name)))*.7)),w2=Math.max(5,Math.ceil(Math.max(0,...S.items.map(i=>vis(i.spec)))*.5));
- const fcol=fl.length>1,sub=tot?'수령/배정':'',cl=tot?cell:cellA,nc=cs.length+1,cw=100;
+ const fcol=fl.length>1,sub=tot?'재고/입고':'',cl=tot?cell:cellA,nc=cs.length+1,cw=100;
  const head=`<tr><th class="cn">품목</th><th class="cs">규격</th>${showCat?'<th>분류</th>':''}${cs.map(c=>`<th class="c">${esc(c.name)}${sub?`<br><span class="mu">${sub}</span>`:''}</th>`).join('')}<th class="c">전체${sub?`<br><span class="mu">${sub}</span>`:''}</th>${fcol?'<th>파일별 배정</th>':''}<th></th></tr>`;
  const body=its.map(i=>{const t=sc(i.id,fc,ids);
   const fb=fcol?`<td class="fl">${fl.filter(x=>tot||f.key===x.key).map(x=>{const n=sc(i.id,fc,new Set(x.ids)).a;return n?`<span class="mu" title="${esc(x.name)}">${esc(shortN(x.name,10))}</span> <b>${n}</b>`:''}).filter(Boolean).join('<br>')||'<span class="mu">-</span>'}</td>`:'';
@@ -223,12 +223,12 @@ function dash(){
  <button class="btn s" onclick="exportX()">엑셀로 내려받기</button>${S.items.length?'':'<button class="btn" onclick="demo()">샘플 데이터 넣기</button>'}
  ${S.items.length||S.centers.length?'<button class="btn s" onclick="resetData(false)" style="margin-left:auto">현황 초기화</button><button class="btn s" onclick="resetData(true)">전체 초기화 (센터 포함)</button>':''}</div>
  ${S.items.length?`<div class="wrap"><table style="table-layout:fixed;width:calc(${w1+w2}ch + ${nc*cw+(showCat?90:0)+(fcol?150:0)+70}px)"><colgroup><col style="width:${w1}ch"><col style="width:${w2}ch">${showCat?'<col style="width:90px">':''}${('<col style="width:'+cw+'px">').repeat(nc)}${fcol?'<col style="width:150px">':''}<col style="width:70px"></colgroup>${head}${body||'<tr><td colspan="9" class="mu">검색 결과가 없습니다.</td></tr>'}${foot}</table></div>
- <p class="mu">${tot?'칸 안의 숫자는 수령/배정 수량이고, 아래 막대는 수령률, 그 아래는 현재고입니다. 수령이 배정보다 많으면 "초과"로 표시됩니다.'+(fcol?' “파일별 배정”은 업로드한 파일마다 배정된 수량입니다.':''):'칸 안의 숫자는 이 파일에서 배정된 수량입니다.'}</p>`:'<div class="box mu">아직 품목이 없습니다. 엑셀 업로드에서 배정 목록을 올리거나 샘플 데이터를 넣어 보세요.</div>'}`;
+ <p class="mu">${tot?'칸 안의 숫자는 재고/입고 수량입니다. 앞의 숫자는 지금 남은 재고, 뒤의 숫자는 지금까지 입고된 수량이라 두 숫자의 차이가 출고·폐기로 빠진 수량입니다. 아래 막대는 입고 수량 대비 남은 재고의 비율이며, 30% 미만이면 주황색으로 바뀝니다. 칸에 마우스를 올리면 배정 수량도 볼 수 있습니다.'+(fcol?' “파일별 배정”은 업로드한 파일마다 배정된 수량입니다.':''):'칸 안의 숫자는 이 파일에서 배정된 수량입니다.'}</p>`:'<div class="box mu">아직 품목이 없습니다. 엑셀 업로드에서 배정 목록을 올리거나 샘플 데이터를 넣어 보세요.</div>'}`;
 }
 function cell(t){
  if(!t.a&&!t.r)return '<td class="c mu">-</td>';
- const p=t.a?Math.min(100,Math.round(t.r/t.a*100)):100;
- return `<td class="c"><b>${t.r}</b>/${t.a}${t.r>t.a?' <span class="tag t-wn">초과</span>':''}<div class="bar ${t.r<t.a?'w':''}"><i style="width:${p}%"></i></div><span class="mu">재고 ${t.s}</span></td>`}
+ const used=Math.max(0,t.r-t.s),p=t.r?Math.min(100,Math.round(t.s/t.r*100)):0;
+ return `<td class="c" title="재고 ${t.s} / 입고 ${t.r} · 배정 ${t.a} · 출고·폐기 등으로 빠진 수량 ${used}"><b>${t.s}</b>/${t.r}<div class="bar ${p<30?'w':''}"><i style="width:${p}%"></i></div></td>`}
 function keep(){const p=$('#sq').selectionStart;render();const e=$('#sq');e.focus();e.setSelectionRange(p,p)}
 
 /* ---------- 엑셀 업로드 ---------- */
