@@ -216,9 +216,20 @@ const hasPN=it=>S.lots.some(l=>l.itemId===it.id&&l.qty>0&&!l.exp);
 function tg(id,o){if(o)openSet.add(id);else openSet.delete(id)}
 const EV={in:'입고',out:'출고',fix:'수정'};
 function evHtml(id){
- const L=S.logs.filter(g=>g.itemId===id).sort((a,b)=>(dateOf(b)+b.ts)<(dateOf(a)+a.ts)?-1:1),M=50;
- if(!L.length)return '<div class="mu" style="margin-top:12px">입고·출고 내역이 아직 없습니다.</div>';
- return `<div style="margin-top:14px"><b>입고·출고 내역</b> <span class="mu">${L.length}건</span></div><div class="wrap"><table><tr><th>일자</th><th>구분</th><th class="num">수량</th><th>유효기간</th><th>담당</th><th>메모·사유</th></tr>${L.slice(0,M).map(g=>`<tr class="${g.voided?'void':''}"><td>${dateOf(g)}<div class="mu">${esc(String(g.ts||'').slice(11))}</div></td><td><span class="tag ${g.type==='in'?'t-ok':g.type==='out'?'t-wn':'t-er'}">${EV[g.type]||esc(g.type)}</span>${g.voided?'<div class="mu">삭제됨</div>':''}</td><td class="num"><b>${g.d>0?'+':''}${g.d}</b></td><td>${esc(g.exp||'미입력')}</td><td>${esc(g.user)}</td><td>${esc(g.note||'')}</td></tr>`).join('')}</table></div>${L.length>M?`<div class="mu">최근 ${M}건만 보여 줍니다. 전체는 이력 탭에서 확인하세요.</div>`:''}`}
+ const lots=S.lots.filter(l=>l.itemId===id),M=50;
+ // 입고 기록이 없는 재고(관리자가 배정해 자동 입고된 수량 등)도 입고 줄로 함께 보여 줌
+ const virt=lots.filter(l=>l.qty>0&&!S.logs.some(g=>g.lotId===l.id&&g.type==='in'&&!g.voided)).map(l=>({id:'v'+l.id,virt:1,type:'in',itemId:id,lotId:l.id,exp:l.exp||'',d:l.rec==null?l.qty:l.rec,date:l.inDate||'',ts:(l.inDate||'')+' 00:00',user:l.auto?'자동 입고':'-',note:l.auto?'배정 입고':'',voided:false}));
+ const key=g=>dateOf(g)+' '+String(g.ts||'').slice(11);
+ const cmp=(a,b)=>key(a)<key(b)?1:key(a)>key(b)?-1:0;
+ const L=S.logs.filter(g=>g.itemId===id).sort(cmp),all=virt.sort(cmp).concat(L.slice(0,M)).sort(cmp);
+ if(!all.length)return '<div class="mu" style="margin-top:12px">입고·출고 내역이 아직 없습니다. 아래 버튼으로 입고하세요.</div>';
+ const seen=new Set();
+ const row=g=>{
+  const l=lots.find(x=>x.id===g.lotId),d=g.exp?dleft(g.exp):null,first=g.type==='in'&&!g.voided&&l&&!seen.has(l.id);if(first)seen.add(l.id);
+  const left=!g.exp?'-':d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">D-'+d+'</span>':'D-'+d;
+  const act=first?(l.exp?`<button class="btn s" onclick="editLot('${l.id}')">수정</button>`:`<button class="btn" onclick="editLot('${l.id}')">유효기간 입력</button>`):'';
+  return `<tr class="${g.voided?'void':''}"><td>${dateOf(g)||'-'}${g.virt?'':`<div class="mu">${esc(String(g.ts||'').slice(11))}</div>`}</td><td><span class="tag ${g.type==='in'?'t-ok':g.type==='out'?'t-wn':'t-er'}">${EV[g.type]||esc(g.type)}</span>${g.voided?'<div class="mu">삭제됨</div>':''}</td><td>${g.exp?esc(g.exp):'<span class="tag t-wn">미입력</span>'}</td><td>${left}</td><td>${esc(g.user)}</td><td>${esc(g.note||'')}</td><td class="num"><b>${g.d>0?'+':''}${g.d}</b>${first?`<div class="mu">재고 ${l.qty}</div>`:''}</td><td>${act}</td></tr>`};
+ return `<div class="wrap"><table><tr><th>일자</th><th>구분</th><th>유효기간</th><th>남은 일</th><th>담당</th><th>사유</th><th class="num">수량</th><th></th></tr>${all.map(row).join('')}</table></div>${L.length>M?`<div class="mu">최근 ${M}건만 보여 줍니다. 전체는 이력 탭에서 확인하세요.</div>`:''}`}
 function itemCard(it){
   const ls=lotsOf(it.id),t=ls.reduce((s,l)=>s+l.qty,0);
   const ex=ls.filter(l=>dleft(l.exp)<0),sn=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN);
@@ -227,7 +238,7 @@ function itemCard(it){
   <div class="mu">사용 가능 ${ok} · 최근 출고일 ${lastOut(it.id)}
   ${ex.length?'<span class="tag t-er">만료 '+ex.length+'건</span>':''}${sn.length?'<span class="tag t-wn">임박 '+sn.length+'건</span>':''}${pn.length?'<span class="tag t-wn">유효기간 미입력 '+pn.length+'건</span>':''}</div></div><button class="btn s" style="flex:none;min-height:40px;padding:4px 10px;font-size:18px;line-height:1" aria-label="즐겨찾기" onclick="event.preventDefault();event.stopPropagation();fav('${it.id}')">${(S.fav||{})[it.id]?'★':'☆'}</button></div></summary>
   <div style="display:flex;gap:8px;margin-top:10px"><button class="btn s" onclick="goIn('${it.id}')">+ 입고</button><button class="btn s" ${t>0?'':'disabled'} onclick="goOut('${it.id}')">− 출고</button></div>
-  <div class="wrap"><table><tr><th>입고일</th><th>입고 담당</th><th>유효기간</th><th>남은 일</th><th class="num">수량</th><th></th></tr>${ls.map(l=>{const d=dleft(l.exp);return `<tr><td>${l.inDate||'-'}${memoOf(l)?'<div class="mu">'+esc(memoOf(l))+'</div>':''}</td><td>${esc(inUser(l))}</td><td>${l.exp||'<span class="tag t-wn">미입력</span>'}</td><td>${!l.exp?'-':d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">D-'+d+'</span>':'D-'+d}</td><td class="num">${l.qty}</td><td><button class="btn${l.exp?' s':''}" onclick="editLot('${l.id}')">${l.exp?'수정':'유효기간 입력'}</button></td></tr>`}).join('')||'<tr><td colspan="6" class="mu">재고 없음</td></tr>'}</table></div>${evHtml(it.id)}</details>`}
+  ${evHtml(it.id)}</details>`}
 const chipList=()=>{const cats=[...new Set(S.items.map(i=>i.cat).filter(Boolean))],nf=S.items.filter(i=>(S.fav||{})[i.id]).length,np=S.items.filter(hasPN).length;
  return [['','전체 '+S.items.length],['__fav','★ 즐겨찾기 '+nf]].concat(cats.map(c=>[c,c+' '+S.items.filter(i=>i.cat===c).length]),np?[['__pn','유효기간 미입력 '+np]]:[])};
 function chipsHtml(){return chipList().map((c,k)=>`<button class="btn s" style="flex:none;min-height:36px;padding:4px 12px${sc===c[0]?';border-color:var(--ac);color:var(--ac);font-weight:700':''}" onclick="setSc(${k})">${esc(c[1])}</button>`).join('')}
