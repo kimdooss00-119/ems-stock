@@ -39,6 +39,7 @@ td,th{padding:6px 4px;border-bottom:1px solid var(--ln);text-align:left}th{color
 .pv{background:var(--okb);color:var(--ok);border-radius:6px;padding:8px 10px;font-size:13px;margin-top:12px}
 .pv.x{background:var(--erb);color:var(--er)}
 .void{opacity:.5;text-decoration:line-through}
+#sq::-webkit-search-cancel-button{-webkit-appearance:none;display:none}
 textarea{min-height:90px;font-size:12px;font-family:monospace}
 body.pc .app{max-width:1000px;padding-bottom:24px}body.pc .who,body.pc nav{display:none}body.pc #v{display:block}
 body.pc details.card summary{cursor:default}
@@ -142,8 +143,8 @@ function go(t){tab=t;ed=null;render()}
 function msg(t){alert(t)}
 function user(){const u=$('#u').value.trim();if(!u){msg('담당자 이름을 먼저 입력하세요.');$('#u').focus();return null}S.user=u;return u}
 let ed=null,outItem='';
-function goIn(id){tab='in';ed=null;render();const s=$('#i1');if(s){s.value=id;$('#nw').style.display='none'}const q=$('#psel');if(q)q.value=id}
-function goOut(id){if(total(id)<=0)return msg('출고할 재고가 없습니다.');outItem=id;tab='out';ed=null;render()}
+function goIn(id){if(sq){shAdd(sq);sb=''}tab='in';ed=null;render();const s=$('#i1');if(s){s.value=id;$('#nw').style.display='none'}const q=$('#psel');if(q)q.value=id}
+function goOut(id){if(sq){shAdd(sq);sb=''}if(total(id)<=0)return msg('출고할 재고가 없습니다.');outItem=id;tab='out';ed=null;render()}
 const thumb=it=>it.img?`<img src="${it.img}" alt="${esc(it.name)}" style="width:52px;height:52px;object-fit:cover;border-radius:6px;display:block">`:'<div style="width:52px;height:52px;border-radius:6px;background:var(--bg);border:1px solid var(--ln);display:flex;align-items:center;justify-content:center;font-size:22px">📦</div>';
 const memoOf=l=>l.memo!==undefined?l.memo:((S.logs.filter(x=>x.lotId===l.id&&x.type==='in'&&!x.voided).pop()||{}).note||'');
 function editLot(id){ed=id;render()}
@@ -192,7 +193,21 @@ function saveLot(){
  S.logs.push({id:uid(),ts:now(),type:'fix',itemId:l.itemId,lotId:l.id,exp:ex,d:dq,date:ymd(new Date()),note:'수정: '+ch.join(', '),user:u,synced:false,voided:false});
  save();ed=null;msg('수정 저장 완료');render();
 }
-let sq='',sc='',openSet=new Set();
+let sq='',sb='',sc='',openSet=new Set();
+const shAdd=t=>{t=String(t||'').trim();if(!t)return;S.sh=[t].concat((S.sh||[]).filter(x=>x!==t)).slice(0,10);persist()};
+function shHtml(){const L=S.sh||[];return L.length?`<div class="mu" style="display:flex;justify-content:space-between;align-items:center"><span>최근 검색</span><button class="btn s" style="min-height:28px;padding:2px 10px" onclick="shClear()">기록 모두 지우기</button></div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${L.map((t,k)=>`<span style="display:inline-flex;border:1px solid var(--ln);border-radius:16px;overflow:hidden"><button class="btn s" style="border:0;min-height:32px;padding:2px 10px" onclick="shUse(${k})">${esc(t)}</button><button class="btn s" style="border:0;border-left:1px solid var(--ln);min-height:32px;padding:2px 8px" onclick="shDel(${k})" aria-label="기록 삭제">✕</button></span>`).join('')}</div>`:'<div class="mu">검색 기록이 없습니다.</div>'}
+function shShow(){const e=$('#sh');if(e){e.innerHTML=shHtml();e.style.display='block'}}
+function shHide(){const e=$('#sh');if(e)e.style.display='none'}
+function xBtn(){const b=$('#sqx'),i=$('#sq');if(b)b.style.display=i&&i.value?'block':'none'}
+function sqFocus(){const i=$('#sq');if(sq||sb||(i&&i.value)){sq=sb='';if(i)i.value='';drawList()}xBtn();shShow()}
+function onSq(v){sq=sb=v;xBtn();drawList();if(v.trim())shHide();else shShow()}
+function sqEnter(){shAdd(sq);shHide();const i=$('#sq');if(i)i.blur()}
+function sqClear(){sq=sb='';const i=$('#sq');if(i){i.value='';i.focus()}xBtn();drawList();shShow()}
+function sqBlur(){setTimeout(shHide,150)}
+function shUse(k){const t=(S.sh||[])[k];if(!t)return;sq=sb=t;const i=$('#sq');if(i){i.value=t;i.blur()}shAdd(t);shHide();xBtn();drawList()}
+function shDel(k){(S.sh||[]).splice(k,1);persist();shShow()}
+function shClear(){S.sh=[];persist();shShow()}
+function itemTap(){if(sq){shAdd(sq);sb='';const i=$('#sq');if(i)i.value='';xBtn()}}
 const CHO='ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
 const cho=s=>[...String(s||'')].map(c=>{const n=c.charCodeAt(0)-44032;return n>=0&&n<11172?CHO[Math.floor(n/588)]:c}).join('');
 const nrm=s=>String(s||'').replace(/\s+/g,'').toLowerCase();
@@ -203,7 +218,7 @@ function itemCard(it){
   const ls=lotsOf(it.id),t=ls.reduce((s,l)=>s+l.qty,0);
   const ex=ls.filter(l=>dleft(l.exp)<0),sn=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN);
   const ok=t-ex.reduce((s,l)=>s+l.qty,0),pn=ls.filter(l=>!l.exp);
-  return `<details class="card" ${openSet.has(it.id)?'open':''} ontoggle="tg('${it.id}',this.open)"><summary><div style="display:flex;gap:10px;align-items:center"><div style="flex:none">${thumb(it)}</div><div style="flex:1;min-width:0"><div class="row"><b>${dn(it)}</b><span><b class="num">${t}</b> ${esc(it.unit)}</span></div>
+  return `<details class="card" ${openSet.has(it.id)?'open':''} ontoggle="tg('${it.id}',this.open)"><summary onclick="itemTap()"><div style="display:flex;gap:10px;align-items:center"><div style="flex:none">${thumb(it)}</div><div style="flex:1;min-width:0"><div class="row"><b>${dn(it)}</b><span><b class="num">${t}</b> ${esc(it.unit)}</span></div>
   ${(()=>{const A=(S.allocs||[]).filter(a=>a.itemId===it.id).reduce((s,a)=>s+a.qty,0);if(!A)return '';const R=S.lots.filter(l=>l.itemId===it.id).reduce((s,l)=>s+(l.rec==null?l.qty:l.rec),0);return `<div style="margin:2px 0"><span class="tag t-ok">배정 ${A}</span> <span class="tag ${R>=A?'t-ok':'t-wn'}">입고 ${R}</span> <span class="mu">${R>=A?'배정 수량 입고 완료':'입고 예정 '+(A-R)}</span></div>`})()}<div class="mu">사용 가능 ${ok} · 최근 출고일 ${lastOut(it.id)}
   ${ex.length?'<span class="tag t-er">만료 '+ex.length+'건</span>':''}${sn.length?'<span class="tag t-wn">임박 '+sn.length+'건</span>':''}${pn.length?'<span class="tag t-wn">유효기간 미입력 '+pn.length+'건</span>':''}</div></div><button class="btn s" style="flex:none;min-height:40px;padding:4px 10px;font-size:18px;line-height:1" aria-label="즐겨찾기" onclick="event.preventDefault();event.stopPropagation();fav('${it.id}')">${(S.fav||{})[it.id]?'★':'☆'}</button></div></summary>
   <div style="display:flex;gap:8px;margin-top:10px"><button class="btn s" onclick="goIn('${it.id}')">+ 입고</button><button class="btn s" ${t>0?'':'disabled'} onclick="goOut('${it.id}')">− 출고</button></div>
@@ -218,9 +233,9 @@ function visItems(){
 function listHtml(){
  const L=visItems();
  if(!S.items.length)return '<div class="card mu">등록된 품목이 없습니다. 아래 입고 탭에서 새 품목을 등록하고 입고하세요.</div>';
- if(!L.length)return `<div class="card mu">검색 결과가 없습니다.${sq||sc?' <button class="btn s" onclick="sq=\'\';sc=\'\';render()">검색 조건 지우기</button>':''}</div>`;
+ if(!L.length)return `<div class="card mu">검색 결과가 없습니다.${sq||sc?' <button class="btn s" onclick="sq=sb=\'\';sc=\'\';render()">검색 조건 지우기</button>':''}</div>`;
  const fv=L.filter(i=>(S.fav||{})[i.id]).length;
- return `<div class="mu" style="margin:4px 0">${L.length}개 품목${fv&&!sc?' · ★ 즐겨찾기가 맨 위에 있습니다':''}</div>`+L.map(itemCard).join('')}
+ return `<div class="mu" style="margin:4px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${sq?'<span>‘'+esc(sq)+'’ 검색 결과 '+L.length+'개</span><button class="btn s" style="min-height:28px;padding:2px 10px" onclick="sq=sb=\'\';render()">전체 보기</button>':'<span>'+L.length+'개 품목'+(fv&&!sc?' · ★ 즐겨찾기가 맨 위에 있습니다':'')+'</span>'}</div>`+L.map(itemCard).join('')}
 function drawList(){const e=$('#sl');if(e)e.innerHTML=listHtml();const c=$('#chips');if(c)c.innerHTML=chipsHtml()}
 function setSc(k){sc=chipList()[k][0];render()}
 function fav(id){S.fav=S.fav||{};if(S.fav[id])delete S.fav[id];else S.fav[id]=1;persist();drawList()}
@@ -230,7 +245,7 @@ function stock(){
  S.items.forEach(it=>{const ls=lotsOf(it.id);tq+=ls.reduce((s,l)=>s+l.qty,0);exp+=ls.filter(l=>dleft(l.exp)<0).length;soon+=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN).length;PN+=ls.filter(l=>!l.exp).length});
  const AT=(S.allocs||[]).reduce((s,a)=>s+a.qty,0);
  return `<div class="sum">${PN?`<div class="warn"><b>${PN}</b><span>유효기간 입력 필요</span></div>`:''}<div><b>${S.items.length}</b><span>관리 품목</span></div>${AT?`<div><b>${AT}</b><span>배정 수량 합계</span></div>`:''}<div><b>${tq}</b><span>총 재고 수량</span></div><div class="${soon?'warn':''}"><b>${soon}</b><span>${WARN}일 내 임박</span></div><div class="${exp?'bad':''}"><b>${exp}</b><span>만료 (폐기 대상)</span></div></div>
- <div id="ctl" style="position:sticky;top:calc(var(--hh,56px) + env(safe-area-inset-top,0px));background:var(--bg);padding:8px 0;z-index:4"><input id="sq" type="search" placeholder="품목 검색 (예: 거즈, 장갑, ㄱㅈ)" autocomplete="off" value="${esc(sq)}" oninput="sq=this.value;drawList()" style="width:100%"><div id="chips" style="display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px">${chipsHtml()}</div></div>
+ <div id="ctl" style="position:sticky;top:calc(var(--hh,56px) + env(safe-area-inset-top,0px));background:var(--bg);padding:8px 0;z-index:4"><div style="position:relative"><input id="sq" type="search" enterkeyhint="search" placeholder="품목 검색 (예: 거즈, 장갑, ㄱㅈ)" autocomplete="off" value="${esc(sb)}" oninput="onSq(this.value)" onfocus="sqFocus()" onblur="sqBlur()" onkeydown="if(event.key==='Enter'){event.preventDefault();sqEnter()}" style="width:100%;padding-right:42px"><button id="sqx" class="btn s" onpointerdown="event.preventDefault()" onclick="sqClear()" aria-label="검색어 지우기" style="position:absolute;right:3px;top:3px;min-height:30px;width:34px;padding:0;border:0;font-size:16px;display:${sb?'block':'none'}">✕</button><div id="sh" onpointerdown="event.preventDefault()" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--sf);border:1px solid var(--ln);border-radius:8px;z-index:7;padding:10px;box-shadow:0 6px 18px rgba(0,0,0,.25)"></div></div><div id="chips" style="display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px">${chipsHtml()}</div></div>
  <div id="sl">${listHtml()}</div>
  <p class="mu">같은 품목도 입고일·유효기간이 다르면 따로 관리하며, 출고할 때 어느 입고분에서 뺄지 직접 선택합니다. ☆를 누르면 즐겨찾기로 맨 위에 모입니다. (즐겨찾기는 이 휴대폰에만 저장됩니다)</p>
  ${CLOUD?'':'<button class="btn s" onclick="if(confirm(\'모든 품목과 기록을 삭제할까요? 되돌릴 수 없습니다.\')){S=seed();save();render()}">전체 데이터 삭제</button>'}`;
@@ -575,7 +590,7 @@ function rebuild(){
 function startCloud(){
  CLOUD=true;
  if(S.cid!==CID){try{if((S.lots||[]).length||(S.logs||[]).length)localStorage.setItem(K+'_backup_'+Date.now(),JSON.stringify(S))}catch(e){}
-  S={items:[],lots:[],logs:[],allocs:[],user:S.user||'',lastSync:'',codes:S.codes||{},fav:S.fav||{},cid:CID}}
+  S={items:[],lots:[],logs:[],allocs:[],user:S.user||'',lastSync:'',codes:S.codes||{},fav:S.fav||{},sh:S.sh||[],cid:CID}}
  S.allocs=S.allocs||[];
  const eqC=c=>c.where('centerId','==',CID);
  Cloud.watch('items',{map:IT_MAP,cb:a=>{RI=a;rebuild()}});
