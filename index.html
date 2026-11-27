@@ -23,7 +23,7 @@ label{display:block;font-size:13px;color:var(--mu);margin:12px 0 4px}
 .btn{background:var(--ac);color:var(--acx);border:0;border-radius:6px;padding:12px 16px;font-weight:700;cursor:pointer;min-height:44px;width:100%;margin-top:16px}
 .btn.s{background:var(--sf);color:var(--tx);border:1px solid var(--ln);width:auto;margin:0;padding:6px 10px;min-height:32px;font-size:13px;font-weight:500}
 :focus-visible{outline:2px solid var(--ac);outline-offset:2px}
-.sum{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px;margin:14px 0}
 .sum div{background:var(--sf);border:1px solid var(--ln);border-radius:6px;padding:10px}
 .sum b{display:block;font-size:22px;line-height:1.2}.sum span{font-size:12px;color:var(--mu)}
 .sum .bad b{color:var(--er)}.sum .warn b{color:var(--wn)}
@@ -186,11 +186,12 @@ function stock(){
   const ok=t-ex.reduce((s,l)=>s+l.qty,0);
   exp+=ex.length;soon+=sn.length;
   return `<details class="card"><summary><div style="display:flex;gap:10px;align-items:center"><div style="flex:none">${thumb(it)}</div><div style="flex:1;min-width:0"><div class="row"><b>${dn(it)}</b><span><b class="num">${t}</b> ${esc(it.unit)}</span></div>
-  <div class="mu">${(()=>{const A=(S.allocs||[]).filter(a=>a.itemId===it.id).reduce((s,a)=>s+a.qty,0);return A?'배정 '+A+' · 입고 '+S.lots.filter(l=>l.itemId===it.id).reduce((s,l)=>s+(l.rec==null?l.qty:l.rec),0)+' · ':''})()}사용 가능 ${ok} · 최근 출고일 ${lastOut(it.id)}
+  ${(()=>{const A=(S.allocs||[]).filter(a=>a.itemId===it.id).reduce((s,a)=>s+a.qty,0);if(!A)return '';const R=S.lots.filter(l=>l.itemId===it.id).reduce((s,l)=>s+(l.rec==null?l.qty:l.rec),0);return `<div style="margin:2px 0"><span class="tag t-ok">배정 ${A}</span> <span class="tag ${R>=A?'t-ok':'t-wn'}">입고 ${R}</span> <span class="mu">${R>=A?'배정 수량 입고 완료':'입고 예정 '+(A-R)}</span></div>`})()}<div class="mu">사용 가능 ${ok} · 최근 출고일 ${lastOut(it.id)}
   ${ex.length?'<span class="tag t-er">만료 '+ex.length+'건</span>':''}${sn.length?'<span class="tag t-wn">임박 '+sn.length+'건</span>':''}</div></div></div></summary>
   <div style="display:flex;gap:8px;margin-top:10px"><button class="btn s" onclick="goIn('${it.id}')">+ 입고</button><button class="btn s" ${t>0?'':'disabled'} onclick="goOut('${it.id}')">− 출고</button></div>
   <div class="wrap"><table><tr><th>입고일</th><th>입고 담당</th><th>유효기간</th><th>남은 일</th><th class="num">수량</th><th></th></tr>${ls.map(l=>{const d=dleft(l.exp);return `<tr><td>${l.inDate||'-'}${memoOf(l)?'<div class="mu">'+esc(memoOf(l))+'</div>':''}</td><td>${esc(inUser(l))}</td><td>${l.exp}</td><td>${d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">D-'+d+'</span>':'D-'+d}</td><td class="num">${l.qty}</td><td><button class="btn s" onclick="editLot('${l.id}')">수정</button></td></tr>`}).join('')||'<tr><td colspan="6" class="mu">재고 없음</td></tr>'}</table></div></details>`}).join('');
- return `<div class="sum"><div><b>${S.items.length}</b><span>관리 품목</span></div><div><b>${tq}</b><span>총 재고 수량</span></div><div class="${soon?'warn':''}"><b>${soon}</b><span>${WARN}일 내 임박</span></div><div class="${exp?'bad':''}"><b>${exp}</b><span>만료 (폐기 대상)</span></div></div>${rows||'<div class="card mu">등록된 품목이 없습니다. 아래 입고 탭에서 새 품목을 등록하고 입고하세요.</div>'}
+ const AT=(S.allocs||[]).reduce((s,a)=>s+a.qty,0);
+ return `<div class="sum"><div><b>${S.items.length}</b><span>관리 품목</span></div>${AT?`<div><b>${AT}</b><span>배정 수량 합계</span></div>`:''}<div><b>${tq}</b><span>총 재고 수량</span></div><div class="${soon?'warn':''}"><b>${soon}</b><span>${WARN}일 내 임박</span></div><div class="${exp?'bad':''}"><b>${exp}</b><span>만료 (폐기 대상)</span></div></div>${rows||'<div class="card mu">등록된 품목이 없습니다. 아래 입고 탭에서 새 품목을 등록하고 입고하세요.</div>'}
  <p class="mu">같은 품목도 입고일·유효기간이 다르면 따로 관리하며, 출고할 때 어느 입고분에서 뺄지 직접 선택합니다.</p>
  ${CLOUD?'':'<button class="btn s" onclick="if(confirm(\'모든 품목과 기록을 삭제할까요? 되돌릴 수 없습니다.\')){S=seed();save();render()}">전체 데이터 삭제</button>'}`;
 }
