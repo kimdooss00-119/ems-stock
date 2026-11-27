@@ -171,8 +171,8 @@ function saveLot(){
  const l=S.lots.find(x=>x.id===ed);if(!l)return;
  const dt=$('#d1').value,ex=$('#d2').value,q=parseInt($('#d3').value,10),mm=$('#d4').value.trim();
  if(!dt)return msg('입고일을 입력하세요.');
- if(!ex)return msg('유효기간을 입력하세요.');
- if(!(q>=0))return msg('수량은 0 이상으로 입력하세요.');
+  if(!(q>=0))return msg('수량은 0 이상으로 입력하세요.');
+ if(!l.exp&&!ex){l.inDate=dt;l.memo=mm;save();ed=null;phNo();msg('저장했습니다. 유효기간은 나중에 입력할 수 있습니다.');return render()}
  if(!l.exp){
   if(q<1||q>l.qty)return msg('수량은 1 이상, '+l.qty+' 이하로 입력하세요.');
   const rest=l.qty-q,dupe=S.lots.find(x=>x.id!==l.id&&x.itemId===l.itemId&&x.exp===ex&&x.inDate===dt&&(x.batch||'')===(l.batch||''));let tg=l;
@@ -226,10 +226,10 @@ function evHtml(id){
  const lastIn={};all.forEach(g=>{if(g.type==='in'&&!g.voided)lastIn[g.lotId]=g.id});
  const row=g=>{
   const l=lots.find(x=>x.id===g.lotId),d=g.exp?dleft(g.exp):null,first=g.type==='in'&&!g.voided&&l&&lastIn[g.lotId]===g.id;
-  const left=!g.exp?'-':d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">D-'+d+'</span>':'D-'+d;
+  const left=!g.exp?'-':d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">'+d+'일</span>':d+'일';
   const act=first?(l.exp?`<button class="btn s" onclick="editLot('${l.id}')">수정</button>`:`<button class="btn" onclick="editLot('${l.id}')">유효기간 입력</button>`):'';
   return `<tr class="${g.voided?'void':''}"><td>${dateOf(g)||'-'}</td><td><span class="tag ${g.type==='in'?'t-ok':g.type==='out'?'t-wn':'t-er'}">${EV[g.type]||esc(g.type)}</span>${g.voided?'<div class="mu">삭제됨</div>':''}</td><td>${g.exp?esc(g.exp):'<span class="tag t-wn">미입력</span>'}</td><td>${left}</td><td>${esc(g.user)}</td><td>${esc(g.note||'')}</td><td class="num"><b>${g.d>0?'+':''}${g.d}</b>${first?`<div class="mu">재고 ${l.qty}</div>`:''}</td><td>${act}</td></tr>`};
- return `<div class="wrap"><table><tr><th>일자</th><th>구분</th><th>유효기간</th><th>남은 일</th><th>담당</th><th>사유</th><th class="num">수량</th><th></th></tr>${all.map(row).join('')}</table></div>${L.length>M?`<div class="mu">오래된 기록은 일부 생략되었습니다(최근 ${M}건만 표시). 전체는 이력 탭에서 확인하세요.</div>`:''}`}
+ return `<div class="wrap"><table><tr><th>일자</th><th>구분</th><th>유효기간</th><th>남은일자</th><th>담당</th><th>사유</th><th class="num">수량</th><th></th></tr>${all.map(row).join('')}</table></div>${L.length>M?`<div class="mu">오래된 기록은 일부 생략되었습니다(최근 ${M}건만 표시). 전체는 이력 탭에서 확인하세요.</div>`:''}`}
 function itemCard(it){
   const ls=lotsOf(it.id),t=ls.reduce((s,l)=>s+l.qty,0);
   const ex=ls.filter(l=>dleft(l.exp)<0),sn=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN);
@@ -502,14 +502,14 @@ const recOf=id=>S.lots.filter(l=>l.itemId===id).reduce((s,l)=>s+(l.rec==null?l.q
 function inView(){
  return photoBox()+`<label for="i1">품목</label><select id="i1" onchange="$('#nw').style.display=this.value==='_new'?'block':'none'">${S.items.map(i=>`<option value="${i.id}">${dn(i)} (${esc(i.unit)})</option>`).join('')}<option value="_new">+ 새 품목 등록</option></select>
  <div id="nw" style="display:${S.items.length?'none':'block'}"><label for="i2">새 품목명</label><input id="i2"><label for="i3">단위 (예: 개, 장)</label><input id="i3" value="개"></div>
- <label for="i8">입고일</label><input id="i8" type="date" value="${ymd(new Date())}"><label for="i5">유효기간</label><input id="i5" type="date"><label for="i6">입고 수량</label><input id="i6" type="number" min="1" inputmode="numeric">
+ <label for="i8">입고일</label><input id="i8" type="date" value="${ymd(new Date())}"><label for="i5">유효기간 <span class="mu">(모르면 비워 두고 나중에 입력)</span></label><input id="i5" type="date"><label for="i6">입고 수량</label><input id="i6" type="number" min="1" inputmode="numeric">
  <label for="i7">메모 (선택)</label><input id="i7" placeholder="예: 납품처, 인수 확인자">
  <button class="btn" onclick="doIn()">입고 저장</button><p class="mu">바코드·OCR 인식은 다음 단계에서 추가됩니다. 지금은 직접 입력합니다.</p>`;
 }
 function doIn(){
  const u=user();if(!u)return;
  let id=$('#i1').value;const exp=$('#i5').value,q=parseInt($('#i6').value,10),dt=$('#i8').value;
- if(!dt)return msg('입고일을 입력하세요.');if(!exp)return msg('유효기간을 입력하세요.');
+ if(!dt)return msg('입고일을 입력하세요.');
  if(!(q>0))return msg('수량은 1 이상이어야 합니다.');
  if(id==='_new'){const n=$('#i2').value.trim();if(!n)return msg('새 품목명을 입력하세요.');
   const it={id:uid(),name:n,unit:$('#i3').value.trim()||'개'};if(CLOUD)it.createdBy=CID;S.items.push(it);id=it.id}
@@ -534,7 +534,7 @@ function outLots(){
  const id=$('#o1').value,re=$('#o3').value,disp=re.startsWith('폐기');
  b.innerHTML='<div class="mu" style="margin-top:12px">출고할 입고분을 골라 수량을 입력하세요. 여러 건에 나눠 입력할 수도 있습니다. '+(disp?'폐기는 만료된 재고만 선택할 수 있습니다.':'만료된 재고는 일반 출고에서 선택할 수 없습니다.')+'</div>'+
  lotsOf(id).map(l=>{const d=dleft(l.exp),ex=d<0,ok=disp?ex:!ex;
-  return `<div class="card" style="${ok?'':'opacity:.5'}"><div class="row"><span><b>입고일 ${l.inDate||'-'}</b><br>유효기간 ${l.exp} ${ex?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">D-'+d+'</span>':''}${memoOf(l)?'<br><span class="mu">'+esc(memoOf(l))+'</span>':''}</span>
+  return `<div class="card" style="${ok?'':'opacity:.5'}"><div class="row"><span><b>입고일 ${l.inDate||'-'}</b><br>유효기간 ${l.exp||'미입력'} ${!l.exp?'':ex?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">'+d+'일 남음</span>':''}${memoOf(l)?'<br><span class="mu">'+esc(memoOf(l))+'</span>':''}</span>
   <span style="text-align:right">잔여 <b>${l.qty}</b><br><input class="oq" data-id="${l.id}" type="number" min="0" max="${l.qty}" inputmode="numeric" placeholder="0" style="width:90px;margin-top:4px" ${ok?'':'disabled'} oninput="outSum()"></span></div></div>`}).join('');
  outSum();
 }
