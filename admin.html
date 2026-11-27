@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>구급 소모품 관리자</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+<style>
+:root{--bg:#f3f4f2;--sf:#fff;--tx:#1d2325;--mu:#5d686b;--ln:#d9dedd;--ac:#c8312b;--acx:#fff;--ok:#1e7a55;--wn:#b36b00;--er:#b42318;--okb:#dff3ea;--wnb:#fdf0d6;--erb:#fde4e1;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151a1b;--sf:#1f2628;--tx:#e8eded;--mu:#9aa6a8;--ln:#333d3f;--ac:#ef6a63;--acx:#1a0c0b;--ok:#5fc79a;--wn:#f0b254;--er:#ff8a80;--okb:#173326;--wnb:#3a2c10;--erb:#3d1b18}}
+:root[data-theme="dark"]{--bg:#151a1b;--sf:#1f2628;--tx:#e8eded;--mu:#9aa6a8;--ln:#333d3f;--ac:#ef6a63;--acx:#1a0c0b;--ok:#5fc79a;--wn:#f0b254;--er:#ff8a80;--okb:#173326;--wnb:#3a2c10;--erb:#3d1b18}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--tx);font:14px/1.5 "Noto Sans KR",system-ui,sans-serif}
+.shell{display:grid;grid-template-columns:200px 1fr;min-height:100%}
+aside{background:var(--sf);border-right:1px solid var(--ln);padding:16px 10px;position:sticky;top:0;height:100vh}
+aside h1{font-size:16px;margin:0 8px 16px}
+aside button{display:flex;justify-content:space-between;width:100%;text-align:left;border:0;background:none;color:var(--tx);padding:10px;border-radius:6px;font:inherit;cursor:pointer}
+aside button.on{background:var(--bg);color:var(--ac);font-weight:700}
+main{padding:20px 24px;min-width:0}
+h2{font-size:18px;margin:0 0 14px}
+input,select{padding:8px;border:1px solid var(--ln);border-radius:6px;background:var(--sf);color:var(--tx);font:inherit;min-height:36px}
+.btn{background:var(--ac);color:var(--acx);border:0;border-radius:6px;padding:8px 14px;font:inherit;font-weight:700;cursor:pointer;min-height:36px}
+.btn.s{background:var(--sf);color:var(--tx);border:1px solid var(--ln);font-weight:500}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}
+.cards div,.box{background:var(--sf);border:1px solid var(--ln);border-radius:8px;padding:12px}
+.cards b{display:block;font-size:22px}.cards span,.mu{color:var(--mu);font-size:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.wrap{overflow:auto;border:1px solid var(--ln);border-radius:8px;background:var(--sf)}
+table{border-collapse:collapse;width:100%}th,td{padding:8px 10px;border-bottom:1px solid var(--ln);text-align:left;vertical-align:top;white-space:nowrap}
+th{background:var(--bg);font-weight:500;color:var(--mu);position:sticky;top:0}
+td.c{text-align:center}
+.bar{height:5px;background:var(--bg);border-radius:3px;margin:3px 0}.bar i{display:block;height:100%;background:var(--ok);border-radius:3px}
+.bar.w i{background:var(--wn)}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px}.t-er{background:var(--erb);color:var(--er)}.t-wn{background:var(--wnb);color:var(--wn)}.t-ok{background:var(--okb);color:var(--ok)}
+.msg{background:var(--okb);color:var(--ok);padding:10px 12px;border-radius:8px;margin-bottom:14px}
+.warn{background:var(--wnb);color:var(--wn);padding:10px 12px;border-radius:8px;margin:10px 0}
+label.f{display:block;color:var(--mu);font-size:12px;margin:10px 0 4px}
+.g2{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.cn,.cs{white-space:normal;overflow-wrap:anywhere;word-break:keep-all}
+.cn{width:var(--w1);min-width:var(--w1);max-width:var(--w1)}
+.cs{width:var(--w2);min-width:var(--w2);max-width:var(--w2)}
+td.fl{white-space:normal;font-size:12px}
+td.c,th.c{min-width:0}
+#th button{width:auto;flex:1;padding:4px 6px}
+.dz{border:2px dashed var(--ln);border-radius:10px;padding:34px 16px;text-align:center;background:var(--sf);cursor:pointer;margin-bottom:10px}
+.dz.on{border-color:var(--ac);background:var(--bg)}
+.btn.s.on{border-color:var(--ac);color:var(--ac);font-weight:700}
+@media(max-width:820px){.shell{grid-template-columns:1fr}aside{position:static;height:auto;display:flex;flex-wrap:wrap;gap:4px}aside h1{width:100%}aside button{width:auto}.cards{grid-template-columns:repeat(2,1fr)}main{padding:14px}}
+</style></head><body>
+<div id="lg" style="position:fixed;inset:0;background:var(--bg);display:none;z-index:9;align-items:center;justify-content:center;padding:16px"><div class="box" style="width:min(380px,100%)"><h2 style="margin-bottom:6px">🚑 관리자 로그인</h2><div class="mu" style="margin-bottom:10px">소방서 관리자 계정으로 로그인합니다.</div>
+<label class="f">이메일</label><input id="le" type="email" autocomplete="username" style="width:100%"><label class="f">비밀번호</label><input id="lp" type="password" autocomplete="current-password" style="width:100%" onkeydown="if(event.key==='Enter')doLogin()">
+<div id="lm" class="mu" style="color:var(--er);min-height:20px;margin:8px 0"></div><button class="btn" style="width:100%" onclick="doLogin()">로그인</button>
+<button class="btn s" style="width:100%;margin-top:8px" onclick="useLocal()">로그인 없이 이 PC에서만 사용</button><div class="mu" style="margin-top:8px">로컬 모드는 서버와 연결되지 않고, 이 브라우저에만 저장됩니다.</div></div></div>
+<div class="shell"><aside><h1>🚑 구급 소모품<br>관리자</h1><nav id="n"></nav><div style="margin-top:14px;padding:0 4px"><div class="mu" style="margin:0 6px 4px">화면 모드</div><div id="th" style="display:flex;gap:4px"></div></div><div id="cs" style="margin-top:14px;padding:0 10px"></div></aside><main id="v"></main></div>
+<script>
+const K='emsAdminV1',WARN=90;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9),p2=n=>String(n).padStart(2,'0');
+const ymd=d=>d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+const addD=n=>{const d=new Date();d.setDate(d.getDate()+n);return ymd(d)};
+const dleft=e=>Math.round((new Date(e+'T00:00:00')-new Date(ymd(new Date())+'T00:00:00'))/864e5);
+const norm=s=>String(s||'').replace(/\s+/g,'').toLowerCase();
+const ck=s=>norm(s).replace(/119|안전센터|지역대|센터/g,'');
+const MK='emsModeAdmin',MODE=(()=>{try{return localStorage.getItem(MK)||''}catch(e){return ''}})();
+let S=null,CLOUD=false,LG=[],rtm=0;
+if(MODE==='local'){try{S=JSON.parse(localStorage.getItem(K))}catch(e){}}
+if(!S||!S.items)S={centers:[],items:[],batches:[],allocs:[],lots:[]};
+const CN=['centers','items','batches','allocs','lots'];
+const save=()=>{
+ if(CLOUD){if(CN.some(n=>Cloud.push(n,S[n])===false))alert('아직 서버에서 데이터를 받는 중입니다. 잠시 뒤 다시 시도하세요.');return}
+ if(MODE!=='local')return;
+ try{localStorage.setItem(K,JSON.stringify(S))}catch(e){alert('저장 공간이 부족합니다.')}};
+/* ---------- 클라우드 (Firebase) 연동 ---------- */
+const FB_CFG={apiKey:"AIzaSyBnusgNeBvlhoZQquf4Sr08E5vqV_G8NV8",authDomain:"ems-stock-277e5.firebaseapp.com",projectId:"ems-stock-277e5",storageBucket:"ems-stock-277e5.firebasestorage.app",messagingSenderId:"1026035896295",appId:"1:1026035896295:web:cfc924b78b2dd1a3ea7742"};
+const ORG='main',BOOT_ADMIN='admin@test.com';
+const Cloud=(()=>{
+ let auth=null,db=null,cfg={},prev={},ready={},unsubs=[];
+ const stable=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((a,x)=>(a[x]=v[x],a),{}):v);
+ const strip=o=>{const r=JSON.parse(JSON.stringify(o));delete r.id;return r};
+ const mk=(n,x)=>JSON.parse(JSON.stringify(cfg[n].map(strip(x))));
+ const api={err:'',onErr:null,
+  ok:()=>typeof firebase!=='undefined',
+  init(appName){if(db)return true;if(!api.ok())return false;
+   const app=firebase.initializeApp(FB_CFG,appName);auth=app.auth();db=app.firestore();
+   try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
+   return true},
+  email:()=>{const u=auth&&auth.currentUser;return u?String(u.email||'').toLowerCase():''},
+  login:(e,p)=>auth.signInWithEmailAndPassword(e,p),
+  logout(){api.stop();return auth.signOut()},
+  onAuth:cb=>auth.onAuthStateChanged(cb),
+  col:n=>db.collection('orgs').doc(ORG).collection(n),
+  member:()=>db.collection('members').doc(api.email()).get().then(d=>d.exists?d.data():null),
+  setMember:(e,d)=>db.collection('members').doc(e.toLowerCase()).set(d),
+  delMember:e=>db.collection('members').doc(e.toLowerCase()).delete(),
+  fail(m){api.err=m;console.error(m);if(api.onErr)api.onErr(m)},
+  watch(name,o){
+   cfg[name]={norm:o.norm||(x=>x),map:o.map||(x=>x)};prev[name]=new Map();ready[name]=false;
+   const ref=o.q?o.q(api.col(name)):api.col(name);
+   unsubs.push(ref.onSnapshot(s=>{
+    const arr=[],m=new Map();
+    s.forEach(d=>{const x=cfg[name].norm(Object.assign({},d.data(),{id:d.id}));arr.push(x);m.set(d.id,stable(mk(name,x)))});
+    prev[name]=m;ready[name]=true;o.cb(arr)
+   },e=>api.fail('읽기 실패('+name+'): '+e.message)))},
+  watchDoc(name,id,cb){unsubs.push(api.col(name).doc(id).onSnapshot(d=>cb(d.exists?d.data():null),e=>api.fail('읽기 실패('+name+'): '+e.message)))},
+  isReady:n=>!!ready[n],
+  push(name,arr,o){
+   o=o||{};if(!ready[name])return false;
+   const sets=[],dels=[],cur=new Map();
+   arr.forEach(x=>{const d=mk(name,x),s=stable(d);cur.set(x.id,s);if(prev[name].get(x.id)!==s)sets.push([x.id,d])});
+   if(!o.noDelete)prev[name].forEach((s,id)=>{if(!cur.has(id))dels.push(id)});
+   if(!sets.length&&!dels.length)return true;
+   sets.forEach(p=>prev[name].set(p[0],cur.get(p[0])));dels.forEach(id=>prev[name].delete(id));
+   const ops=sets.map(p=>[0,p[0],p[1]]).concat(dels.map(id=>[1,id])),ref=api.col(name);
+   for(let i=0;i<ops.length;i+=400){const b=db.batch();ops.slice(i,i+400).forEach(p=>p[0]?b.delete(ref.doc(p[1])):b.set(ref.doc(p[1]),p[2]));b.commit().catch(e=>api.fail('저장 실패('+name+'): '+e.message))}
+   return true},
+  stop(){unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];ready={};prev={};cfg={}}
+ };
+ return api})();
+const loginErr=e=>{const c=e&&e.code||'';return /invalid-credential|wrong-password|user-not-found|invalid-email/.test(c)?'이메일 또는 비밀번호가 맞지 않습니다.':c==='auth/network-request-failed'?'네트워크 연결을 확인하세요.':c==='auth/too-many-requests'?'시도가 너무 많습니다. 잠시 뒤에 다시 하세요.':'로그인 실패: '+((e&&e.message)||e)};
+
+let pg='dash',q='',fc='',note='',lc='';
+const sched=()=>{clearTimeout(rtm);rtm=setTimeout(()=>{const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName||'')&&a.id!=='sq')return;render()},150)};
+const lg=m=>{const e=$('#lg');if(e)e.style.display=m===false?'none':'flex';if(typeof m==='string'&&$('#lm'))$('#lm').textContent=m};
+function startCloud(){
+ CLOUD=true;S={centers:[],items:[],batches:[],allocs:[],lots:[]};LG=[];
+ const lotN=x=>{x.date=x.date||x.inDate||'';if(x.rec==null)x.rec=x.qty;return x};
+ CN.forEach(n=>Cloud.watch(n,{norm:n==='lots'?lotN:null,cb:a=>{S[n]=a;sched()}}));
+ Cloud.watch('logs',{q:c=>c.orderBy('ts','desc').limit(300),cb:a=>{LG=a;sched()}});
+ Cloud.onErr=m=>{sched()};
+ lg(false);render()}
+async function afterAuth(u){
+ if(!u){S={centers:[],items:[],batches:[],allocs:[],lots:[]};CLOUD=false;lg('');render();return}
+ const em=Cloud.email();let m=null;
+ try{m=await Cloud.member()}catch(e){}
+ if(em===BOOT_ADMIN){try{await Cloud.setMember(em,{role:'admin',org:ORG})}catch(e){}m={role:'admin',org:ORG}}
+ if(!m||m.role!=='admin'){await Cloud.logout();lg(!m?'이 계정은 등록되어 있지 않습니다. 관리자에게 문의하세요.':'센터 계정입니다. 센터 계정은 휴대폰 앱에서 사용하세요.');return}
+ startCloud()}
+function doLogin(){const e=$('#le').value.trim(),p=$('#lp').value;if(!e||!p)return lg('이메일과 비밀번호를 입력하세요.');
+ lg('로그인 중…');Cloud.login(e,p).catch(x=>lg(loginErr(x)))}
+function doLogout(){if(confirm('로그아웃할까요?'))Cloud.logout()}
+function useLocal(){try{localStorage.setItem(MK,'local')}catch(e){}location.reload()}
+function goLogin(){try{localStorage.removeItem(MK)}catch(e){}location.reload()}
+function csBox(){const e=$('#cs');if(!e)return;
+ e.innerHTML=CLOUD?`<div class="mu">☁ 서버 연결됨<br>${esc(Cloud.email())}</div>${Cloud.err?`<div class="mu" style="color:var(--er)">${esc(Cloud.err)}</div>`:''}<button class="btn s" style="margin-top:6px;padding:4px 10px;min-height:30px" onclick="doLogout()">로그아웃</button>`
+ :`<div class="mu">로컬 모드 (이 PC에만 저장)</div><button class="btn s" style="margin-top:6px;padding:4px 10px;min-height:30px" onclick="goLogin()">서버 로그인</button>`}
+let vf='',vs='',curCats=[];
+const U={rows:null,h:0,map:{name:0,spec:-1,total:-1},cm:{},name:'',excl:false,H:null,aiNote:'',busy:'',wb:null,sheet:'',sheets:{},order:[],sel:{}};
+const hdr=()=>U.H||((U.rows||[])[U.h]||[]).map(x=>String(x).trim());
+const num=v=>{if(typeof v==='number')return v;const m=String(v==null?'':v).replace(/,/g,'').match(/-?\d+(\.\d+)?/);return m?Number(m[0]):0};
+let gUsed='';
+const nameOf=(a,id)=>(S[a].find(x=>x.id===id)||{name:'?'}).name;
+function stat(i,c){const a=S.allocs.filter(x=>x.itemId===i&&(!c||x.centerId===c)).reduce((s,x)=>s+x.qty,0),L=S.lots.filter(x=>x.itemId===i&&(!c||x.centerId===c));
+ return {a,r:L.reduce((s,x)=>s+x.rec,0),s:L.reduce((s,x)=>s+x.qty,0)}}
+const alerts=()=>S.lots.filter(l=>l.qty>0&&dleft(l.exp)<=WARN).sort((a,b)=>a.exp<b.exp?-1:1);
+
+const vis=s=>[...String(s||'')].reduce((n,c)=>n+(c.charCodeAt(0)>127?2:1),0);
+const shortN=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n)+'…':s};
+const catLabel=c=>c==='__none'?'분류 없음':c;
+// 업로드한 파일 단위로 묶기 (같은 업로드의 시트들은 한 파일)
+const fkey=b=>b.up||('l:'+(b.file||b.label));
+function files(){
+ const used=new Set(S.allocs.map(a=>a.batch)),m=[],seen={};
+ S.batches.forEach(b=>{if(!used.has(b.id))return;const k=fkey(b);if(!seen[k]){seen[k]={key:k,name:b.file||b.label,ids:[],date:b.date};m.push(seen[k])}seen[k].ids.push(b.id)});
+ const cn={},ix={};m.forEach(f=>cn[f.name]=(cn[f.name]||0)+1);
+ m.forEach(f=>{if(cn[f.name]>1){ix[f.name]=(ix[f.name]||0)+1;f.name+=' ('+ix[f.name]+')'}});
+ return m;
+}
+function scope(){const fl=files(),f=fl.find(x=>x.key===vf);if(vf&&!f)vf='';return {fl,f,ids:f?new Set(f.ids):null}}
+// 총 합계 보기는 배정·수령·재고, 파일별 보기는 그 파일의 배정 수량만 (수령·재고는 품목 기준이라 파일로 나눌 수 없음)
+function sc(i,c,ids){if(!ids)return stat(i,c);const a=S.allocs.filter(x=>x.itemId===i&&(!c||x.centerId===c)&&ids.has(x.batch)).reduce((s,x)=>s+x.qty,0);return {a,r:0,s:0}}
+function setVF(k){const fl=files();vf=k<0?'':((fl[k]||{}).key||'');vs='';render()}
+function setVS(k){vs=k<0?'':(curCats[k]||'');render()}
+function cellA(t){return t.a?`<td class="c"><b>${t.a}</b></td>`:'<td class="c mu">-</td>'}
+function renFile(){
+ const {f}=scope();if(!f)return;const v=prompt('파일 이름 변경',f.name.replace(/ \(\d+\)$/,''));if(v===null)return;const nm=v.trim();if(!nm)return alert('이름을 입력하세요.');
+ const up=uid();S.batches.filter(b=>f.ids.includes(b.id)).forEach(b=>{b.up=up;b.file=nm});vf=up;save();note='파일 이름을 “'+nm+'”(으)로 바꿨습니다.';render();
+}
+function renSheet(){
+ if(!vs)return;const old=vs==='__none'?'':vs,v=prompt('시트(분류) 이름 변경'+(vs==='__none'?' — 분류가 없는 품목에 새 분류를 붙입니다':''),old);if(v===null)return;const nm=v.trim();if(!nm)return alert('이름을 입력하세요.');
+ const {ids}=scope();let n=0;
+ S.items.forEach(i=>{if((i.cat||'__none')!==vs)return;if(vs==='__none'&&ids&&!S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch)))return;i.cat=nm;n++});
+ S.batches.forEach(b=>{if((b.sheet||'')===old)b.sheet=nm});
+ vs=nm;save();note='시트 이름을 “'+nm+'”(으)로 바꿨습니다. 품목 '+n+'개의 분류가 함께 바뀌었습니다.';render();
+}
+function delFile(){
+ const {f}=scope();if(!f)return;
+ const n=S.allocs.filter(a=>f.ids.includes(a.batch)).length;
+ if(!confirm('“'+f.name+'” 파일로 올린 배정 '+n+'건을 삭제합니다.\n수령·재고 기록은 지우지 않습니다. 되돌릴 수 없습니다.\n\n계속할까요?'))return;
+ S.allocs=S.allocs.filter(a=>!f.ids.includes(a.batch));S.batches=S.batches.filter(b=>!f.ids.includes(b.id));
+ const used=new Set(S.allocs.map(a=>a.itemId)),lo=new Set(S.lots.map(l=>l.itemId));S.items=S.items.filter(i=>used.has(i.id)||lo.has(i.id));
+ vf='';vs='';save();note='“'+f.name+'” 배정을 삭제했습니다.';render();
+}
+function dash(){
+ const {fl,f,ids}=scope(),tot=!ids;
+ const inScope=S.items.filter(i=>tot||S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch)));
+ curCats=[...new Set(inScope.map(i=>i.cat||'__none'))];
+ if(vs&&!curCats.includes(vs))vs='';
+ const base=inScope.filter(i=>!vs||(i.cat||'__none')===vs),its=base.filter(i=>norm(i.name+i.spec).includes(norm(q))),cs=S.centers.filter(c=>!fc||c.id===fc),showCat=S.items.some(i=>i.cat);
+ let A=0,R=0;base.forEach(i=>{const t=sc(i.id,'',ids);A+=t.a;R+=t.r});
+ const al=tot?S.lots.filter(l=>l.qty>0&&dleft(l.exp)<=WARN&&base.some(i=>i.id===l.itemId)):[],ex=al.filter(l=>dleft(l.exp)<0).length;
+ const nC=tot?S.centers.length:new Set(S.allocs.filter(a=>ids.has(a.batch)).map(a=>a.centerId)).size;
+ const cards=tot?`<div class="cards"><div><b>${nC}</b><span>안전센터</span></div><div><b>${base.length}</b><span>관리 품목</span></div><div><b>${A?Math.round(R/A*100):0}%</b><span>배정 대비 수령 (${R}/${A})</span></div><div><b>${al.length-ex}</b><span>${WARN}일 내 임박</span></div><div><b style="color:var(--er)">${ex}</b><span>만료 재고</span></div></div>`
+  :`<div class="cards"><div><b>${nC}</b><span>배정받은 센터</span></div><div><b>${base.length}</b><span>품목</span></div><div><b>${A}</b><span>배정 수량 합계</span></div></div>`;
+ const fch=fl.length?`<div class="row" style="gap:6px"><span class="mu">파일</span><button class="btn s ${!f?'on':''}" onclick="setVF(-1)">총 합계</button>${fl.map((x,k)=>`<button class="btn s ${f&&f.key===x.key?'on':''}" onclick="setVF(${k})" title="${esc(x.date)}">${esc(x.name)}</button>`).join('')}</div>`:'';
+ const sch=curCats.length>1?`<div class="row" style="gap:6px"><span class="mu">시트</span><button class="btn s ${!vs?'on':''}" onclick="setVS(-1)">전체 (${inScope.length})</button>${curCats.map((c,k)=>`<button class="btn s ${vs===c?'on':''}" onclick="setVS(${k})">${esc(catLabel(c))} (${inScope.filter(i=>(i.cat||'__none')===c).length})</button>`).join('')}${vs?'<button class="btn s" style="margin-left:auto" onclick="renSheet()">시트 이름 변경</button>':''}</div>`:'';
+ const finfo=f?`<div class="box" style="margin-bottom:10px"><div class="row" style="margin:0"><b>${esc(f.name)}</b><span class="mu">업로드 ${esc(f.date)} · 이 보기는 이 파일의 배정 수량만 보여줍니다. 수령·재고는 품목 기준이라 “총 합계”에서 확인하세요.</span><button class="btn s" style="margin-left:auto" onclick="renFile()">파일 이름 변경</button><button class="btn s" onclick="delFile()">이 파일 배정 삭제</button></div></div>`:'';
+ const w1=Math.max(8,Math.ceil(Math.max(0,...S.items.map(i=>vis(i.name)))*.7)),w2=Math.max(5,Math.ceil(Math.max(0,...S.items.map(i=>vis(i.spec)))*.5));
+ const fcol=fl.length>1,sub=tot?'수령/배정':'',cl=tot?cell:cellA,nc=cs.length+1,cw=100;
+ const head=`<tr><th class="cn">품목</th><th class="cs">규격</th>${showCat?'<th>분류</th>':''}${cs.map(c=>`<th class="c">${esc(c.name)}${sub?`<br><span class="mu">${sub}</span>`:''}</th>`).join('')}<th class="c">전체${sub?`<br><span class="mu">${sub}</span>`:''}</th>${fcol?'<th>파일별 배정</th>':''}<th></th></tr>`;
+ const body=its.map(i=>{const t=sc(i.id,fc,ids);
+  const fb=fcol?`<td class="fl">${fl.filter(x=>tot||f.key===x.key).map(x=>{const n=sc(i.id,fc,new Set(x.ids)).a;return n?`<span class="mu" title="${esc(x.name)}">${esc(shortN(x.name,10))}</span> <b>${n}</b>`:''}).filter(Boolean).join('<br>')||'<span class="mu">-</span>'}</td>`:'';
+  return `<tr><td class="cn"><b>${esc(i.name)}</b></td><td class="cs">${esc(i.spec)}</td>${showCat?`<td>${esc(i.cat||'')}</td>`:''}${cs.map(c=>cl(sc(i.id,c.id,ids))).join('')}${cl(t)}${fb}<td><button class="btn s" onclick="editItem('${i.id}')">수정</button></td></tr>`}).join('');
+ const sum=c=>{const o={a:0,r:0,s:0};its.forEach(i=>{const t=sc(i.id,c,ids);o.a+=t.a;o.r+=t.r;o.s+=t.s});return o};
+ const foot=its.length?`<tr style="font-weight:700;background:var(--bg)"><td class="cn">합계</td><td class="cs"></td>${showCat?'<td></td>':''}${cs.map(c=>cl(sum(c.id))).join('')}${cl(sum(fc))}${fcol?'<td></td>':''}<td></td></tr>`:'';
+ return `${note?`<div class="msg">${esc(note)}</div>`:''}<h2>센터별 현황</h2>${fch}${sch}${finfo}${cards}
+ <div class="row"><input id="sq" placeholder="품목·규격 검색" value="${esc(q)}" oninput="q=this.value;keep()"><select onchange="fc=this.value;render()"><option value="">모든 센터</option>${S.centers.map(c=>`<option value="${c.id}" ${fc===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+ <button class="btn s" onclick="exportX()">엑셀로 내려받기</button>${S.items.length?'':'<button class="btn" onclick="demo()">샘플 데이터 넣기</button>'}
+ ${S.items.length||S.centers.length?'<button class="btn s" onclick="resetData(false)" style="margin-left:auto">현황 초기화</button><button class="btn s" onclick="resetData(true)">전체 초기화 (센터 포함)</button>':''}</div>
+ ${S.items.length?`<div class="wrap"><table style="table-layout:fixed;width:calc(${w1+w2}ch + ${nc*cw+(showCat?90:0)+(fcol?150:0)+70}px)"><colgroup><col style="width:${w1}ch"><col style="width:${w2}ch">${showCat?'<col style="width:90px">':''}${('<col style="width:'+cw+'px">').repeat(nc)}${fcol?'<col style="width:150px">':''}<col style="width:70px"></colgroup>${head}${body||'<tr><td colspan="9" class="mu">검색 결과가 없습니다.</td></tr>'}${foot}</table></div>
+ <p class="mu">${tot?'칸 안의 숫자는 수령/배정 수량이고, 아래 막대는 수령률, 그 아래는 현재고입니다. 수령이 배정보다 많으면 "초과"로 표시됩니다.'+(fcol?' “파일별 배정”은 업로드한 파일마다 배정된 수량입니다.':''):'칸 안의 숫자는 이 파일에서 배정된 수량입니다.'}</p>`:'<div class="box mu">아직 품목이 없습니다. 엑셀 업로드에서 배정 목록을 올리거나 샘플 데이터를 넣어 보세요.</div>'}`;
+}
+function cell(t){
+ if(!t.a&&!t.r)return '<td class="c mu">-</td>';
+ const p=t.a?Math.min(100,Math.round(t.r/t.a*100)):100;
+ return `<td class="c"><b>${t.r}</b>/${t.a}${t.r>t.a?' <span class="tag t-wn">초과</span>':''}<div class="bar ${t.r<t.a?'w':''}"><i style="width:${p}%"></i></div><span class="mu">재고 ${t.s}</span></td>`}
+function keep(){const p=$('#sq').selectionStart;render();const e=$('#sq');e.focus();e.setSelectionRange(p,p)}
+
+/* ---------- 엑셀 업로드 ---------- */
+function upload(){
+ if(typeof XLSX==='undefined')return '<h2>엑셀 업로드</h2><div class="warn">엑셀 읽기 도구를 불러오지 못했습니다. 인터넷 연결을 확인하세요.</div>';
+ if(U.busy)return '<h2>엑셀 업로드</h2><div class="box">'+esc(U.busy)+'</div>';
+ if(!U.rows)return `<h2>엑셀 업로드</h2>${aiBox()}<div class="dz" id="dz" ondragover="dzOn(event,1)" ondragleave="dzOn(event,0)" ondrop="dropF(event)" onclick="$('#xf').click()"><b>여기에 엑셀 파일을 끌어다 놓으세요</b><br><span class="mu">또는 눌러서 파일 선택 (.xlsx, .xls, .csv)</span></div>
+ <input id="xf" type="file" accept=".xlsx,.xls,.csv" hidden onchange="fileIn(this.files[0]);this.value=''">
+ <p class="mu">파일 안에 시트가 여러 개면(예: 소모품, 의약품) 시트마다 따로 분석해서 탭으로 보여 드리고, 등록할 시트를 고를 수 있어요. AI 설정을 켜 두면 서식이 제각각이어도 AI가 구조를 판단하고, 꺼 두면 열 이름 규칙으로 찾습니다.</p><button class="btn s" onclick="tpl()">양식 예시 내려받기</button>`;
+ const H=hdr(),m=U.map,P=parsed(),multi=U.order.length>1,nsel=U.order.filter(n=>U.sel[n]).length;
+ const opt=(sel,none)=>(none?`<option value="-1">(없음)</option>`:'')+H.map((x,i)=>x?`<option value="${i}" ${i===sel?'selected':''}>${esc(x)}</option>`:'').join('');
+ const bad=P.filter(x=>x.warn).length,fixed=[m.name,m.spec,m.total];
+ const dc=Object.keys(U.cm).map(Number).filter(i=>U.cm[i]!=='__skip'&&!fixed.includes(i));
+ const cmOpts=i=>`<option value="__skip" ${U.cm[i]==='__skip'?'selected':''}>(사용 안 함)</option><option value="__new" ${U.cm[i]==='__new'?'selected':''}>새 센터로 등록: ${esc(H[i])}</option>`+S.centers.map(c=>`<option value="${c.id}" ${U.cm[i]===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
+ const tabs=multi?`<div class="row" style="gap:6px">${U.order.map((n,i)=>`<button class="btn s ${n===U.sheet?'on':''}" onclick="pickSheet(${i})">${U.sel[n]?'☑':'☐'} ${esc(n)} (${n===U.sheet?P.length:cnt(n)}줄)</button>`).join('')}</div>`:'';
+ const nm=multi?esc((U.name||'배정')+'_'+U.sheet):esc(U.name||'(이름 없음)');
+ return `<h2>엑셀 업로드 · 확인</h2>${aiBox()}${tabs}${U.aiNote?`<div class="${/실패/.test(U.aiNote)?'warn':'msg'}">${U.aiNote?esc(U.aiNote):''}</div>`:''}
+ <div class="box" style="margin-bottom:10px"><b>배정 이름</b> ${nm} <span class="mu">(업로드한 파일 이름${multi?'_시트 이름':''})</span>${multi?`<br><label><input type="checkbox" ${U.sel[U.sheet]?'checked':''} onchange="U.sel[U.sheet]=this.checked;render()"> 이 시트(${esc(U.sheet)})를 등록에 포함</label> <span class="mu">· 등록 시 품목의 분류가 “${esc(U.sheet)}”로 저장됩니다</span>`:''}</div>
+ <div class="row"><button class="btn s" onclick="reSheet()">이 시트 다시 분석</button><button class="btn s" onclick="guess();U.aiNote='';render()">규칙 방식으로 다시 찾기</button><span class="mu">다른 파일을 끌어다 놓으면 새로 분석합니다.</span></div>
+ <details class="box" ${(gcfg().on&&gcfg().key)?'':'open'}><summary class="mu">열이 잘못 읽혔다면 직접 고치기 (보통은 필요 없어요)</summary><div class="g2"><div><label class="f">품명 열</label><select onchange="U.map.name=+this.value;render()">${opt(m.name)}</select></div>
+ <div><label class="f">규격 열</label><select onchange="U.map.spec=+this.value;render()">${opt(m.spec,1)}</select></div>
+ <div><label class="f">총수량 열 (검증용)</label><select onchange="U.map.total=+this.value;render()">${opt(m.total,1)}</select></div>
+ <div><label class="f">머리글 줄 번호</label><input type="number" min="1" value="${U.h+1}" onchange="U.h=Math.max(0,+this.value-1);guess(1);render()"></div></div>
+ <label class="f" style="margin-top:14px">센터(부서) 열 — 각 열이 어느 센터인지 고르세요</label>
+ <div class="g2">${H.map((x,i)=>x&&!fixed.includes(i)?`<div><span class="mu">${esc(x)}</span><select onchange="U.cm[${i}]=this.value;render()">${cmOpts(i)}</select></div>`:'').join('')}</div>
+ </details>
+ <div class="row" style="margin-top:12px"><b>미리보기${multi?' · '+esc(U.sheet):''}</b><span class="mu">${P.length}개 품목 줄</span>${bad?`<span class="tag t-wn">총수량 불일치 ${bad}줄</span>`:'<span class="tag t-ok">경고 없음</span>'}
+ <label><input type="checkbox" ${U.excl?'checked':''} onchange="U.excl=this.checked;render()"> 경고 줄 제외</label></div>
+ <div class="wrap" style="max-height:65vh"><table><tr><th>줄</th><th>품명</th><th>규격</th><th class="c">총수량</th>${dc.map(i=>`<th class="c">${esc(U.cm[i]==='__new'?H[i]:nameOf('centers',U.cm[i]))}</th>`).join('')}<th>상태</th></tr>
+ ${P.map(x=>`<tr><td>${x.ln}</td><td>${esc(x.n)}</td><td>${esc(x.sp)}</td><td class="c">${x.tot==null||isNaN(x.tot)?'-':x.tot}</td>${dc.map(i=>`<td class="c">${(x.d.find(y=>y.c===i)||{q:0}).q||'-'}</td>`).join('')}<td>${x.warn?`<span class="tag t-wn">합계 ${x.sum}≠${x.tot}</span>`:'<span class="tag t-ok">정상</span>'}</td></tr>`).join('')}</table></div>
+ <div class="row" style="margin-top:12px"><button class="btn" onclick="applyUp()">배정 등록${multi?` (선택한 시트 ${nsel}개)`:''}</button><button class="btn s" onclick="resetU();render()">취소</button></div>
+ <p class="mu">같은 품명·규격(·분류)이 이미 있으면 기존 품목에 배정을 추가합니다. 올릴 때마다 별도 배정으로 쌓이며 덮어쓰지 않습니다.</p>`;
+}
+const resetU=()=>{U.rows=null;U.sheets={};U.order=[];U.sel={};U.sheet='';U.busy=''};
+function snap(){if(U.sheet&&U.rows)U.sheets[U.sheet]={rows:U.rows,h:U.h,H:U.H,map:U.map,cm:U.cm,aiNote:U.aiNote}}
+function loadSnap(n){const s=U.sheets[n];U.sheet=n;U.rows=s.rows;U.h=s.h;U.H=s.H;U.map=s.map;U.cm=s.cm;U.aiNote=s.aiNote}
+function withSheet(n,fn){if(n===U.sheet)return fn();const keep=U.sheet;snap();loadSnap(n);try{return fn()}finally{snap();loadSnap(keep)}}
+const cnt=n=>withSheet(n,()=>parsed().length);
+function pickSheet(i){const n=U.order[i];if(!n||n===U.sheet)return;snap();loadSnap(n);render()}
+function dzOn(e,on){e.preventDefault();const d=$('#dz');if(d)d.classList.toggle('on',!!on)}
+function dropF(e){e.preventDefault();e.stopPropagation();const d=$('#dz');if(d)d.classList.remove('on');fileIn(e.dataTransfer&&e.dataTransfer.files[0])}
+function fileIn(f){if(!f)return;if(!/\.(xlsx|xls|csv)$/i.test(f.name))return alert('엑셀 파일(.xlsx, .xls, .csv)만 올릴 수 있습니다.');readF(f)}
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>{e.preventDefault();if(pg!=='upload'||!e.dataTransfer||!e.dataTransfer.files.length)return;if(U.rows&&!confirm('지금 분석 중인 파일을 버리고 새 파일을 분석할까요?'))return;fileIn(e.dataTransfer.files[0])});
+function readF(f){
+ if(!f)return;const r=new FileReader();
+ r.onload=e=>{try{U.wb=XLSX.read(e.target.result,{type:'array'})}catch(x){return alert('엑셀을 읽지 못했습니다.')}
+  U.name=f.name.replace(/\.[^.]+$/,'');analyzeAll()};
+ r.readAsArrayBuffer(f)}
+// 시트마다 따로 구조를 분석해 두고, 탭으로 전환하면서 확인합니다.
+async function analyzeAll(){
+ const c=gcfg(),useAI=c.on&&c.key;
+ const names=U.wb.SheetNames.filter(n=>XLSX.utils.sheet_to_json(U.wb.Sheets[n],{header:1,defval:''}).flat().filter(x=>x!=='').length>0);
+ U.sheets={};U.sel={};U.sheet='';U.order=names;
+ if(!names.length){U.rows=null;return alert('내용이 있는 시트가 없습니다.')}
+ for(let k=0;k<names.length;k++){
+  const n=names[k];U.sheet=n;U.rows=XLSX.utils.sheet_to_json(U.wb.Sheets[n],{header:1,defval:''});U.aiNote='';guess();
+  if(useAI){U.busy='AI가 엑셀 구조를 분석하는 중입니다… (시트 '+(k+1)+'/'+names.length+': '+n+')';render();
+   try{await aiGuess()}catch(e){U.aiNote='AI 분석 실패('+String(e.message).slice(0,120)+') → 규칙 방식으로 찾은 결과입니다. 아래에서 확인하고 고치세요.';guess()}}
+  snap();
+ }
+ U.busy='';
+ names.forEach(n=>{U.sel[n]=withSheet(n,()=>parsed().length)>0});
+ loadSnap(names[0]);render();
+}
+async function reSheet(){
+ const c=gcfg();U.aiNote='';guess();
+ if(c.on&&c.key){U.busy='AI가 시트를 다시 분석하는 중입니다… ('+U.sheet+')';render();
+  try{await aiGuess()}catch(e){U.aiNote='AI 분석 실패('+String(e.message).slice(0,120)+') → 규칙 방식으로 찾은 결과입니다. 아래에서 확인하고 고치세요.';guess()}
+  U.busy=''}
+ snap();render();
+}
+const APROMPT=`아래는 소방서 구급 소모품 "배정 목록" 엑셀의 위쪽 일부입니다. 첫 열은 행 번호(1부터)이고, 나머지 열 머리는 엑셀 열 문자(A, B, C…)입니다. 병합된 칸은 첫 칸에만 값이 있고 나머지는 비어 있을 수 있으며, 머리글이 두 줄 이상일 수 있습니다.
+구조를 판단해 JSON으로만 답하세요. 키:
+- data_start_row: 첫 번째 품목 데이터가 시작하는 행 번호(숫자)
+- name_col: 품명이 있는 열 문자
+- spec_col: 규격이 있는 열 문자(없으면 null)
+- total_col: 총수량(합계) 열 문자(없으면 null)
+- center_cols: 센터(부서)별로 배부할 수량이 들어 있는 열 목록 [{"col":"열 문자","center":"센터 또는 부서 이름"}]. 총수량·합계·비고 열은 제외
+- notes: 이상한 점이나 확인이 필요한 점(한 문장, 없으면 null)
+추측하지 말고 보이는 내용만 근거로 하세요. 품명과 규격이 한 칸에 같이 있으면 spec_col은 null로 하고 notes에 적으세요.`;
+async function aiGuess(){
+ const R=U.rows.slice(0,40),cols=Math.min(30,Math.max(1,...R.map(r=>r.length))),L=['행\t'+Array.from({length:cols},(_,i)=>XLSX.utils.encode_col(i)).join('\t')];
+ R.forEach((r,k)=>L.push((k+1)+'\t'+Array.from({length:cols},(_,i)=>String(r[i]==null?'':r[i]).replace(/[\t\r\n]+/g,' ').slice(0,25)).join('\t')));
+ const d=JSON.parse((await gcall(APROMPT+'\n\n'+L.join('\n'))).replace(/```json|```/g,'').trim());
+ const ci=s=>s&&/^[A-Za-z]{1,2}$/.test(String(s).trim())?XLSX.utils.decode_col(String(s).trim().toUpperCase()):-1;
+ const m={name:ci(d.name_col),spec:ci(d.spec_col),total:ci(d.total_col)},cc=(Array.isArray(d.center_cols)?d.center_cols:[]).filter(x=>x&&ci(x.col)>=0);
+ if(m.name<0||!cc.length)throw new Error('구조를 판단하지 못했습니다');
+ const st=Math.max(1,Math.round(+d.data_start_row)||2);U.map=m;U.h=st-2;
+ const nc=Math.max(cols,...U.rows.map(r=>r.length)),hr=[U.h-1,U.h].filter(i=>i>=0);
+ U.H=Array.from({length:nc},(_,i)=>hr.map(k=>String(U.rows[k][i]==null?'':U.rows[k][i]).trim()).filter(Boolean).join(' '));
+ U.cm={};U.H.forEach((x,i)=>U.cm[i]='__skip');
+ cc.forEach(x=>{const i=ci(x.col),nm=String(x.center||U.H[i]||'').trim();U.H[i]=nm;
+  const c=S.centers.find(c=>ck(c.name)&&ck(c.name)===ck(nm))||S.centers.find(c=>ck(c.name)&&ck(nm)&&(ck(nm).includes(ck(c.name))||ck(c.name).includes(ck(nm))));U.cm[i]=c?c.id:'__new'});
+ U.aiNote='AI 분석 완료'+(d.notes?': '+d.notes:'')+' 아래에서 맞게 읽었는지 확인하세요.';
+}
+/* ---------- Gemini ---------- */
+const gcfg=()=>{try{return JSON.parse(localStorage.getItem('emsAdminGem')||'{}')}catch(e){return {}}};
+function aiBox(){const c=gcfg();
+ return `<details class="box" style="margin-bottom:12px" ${c.key?'':'open'}><summary><b>AI 설정 (Gemini)</b> <span class="mu">${c.on&&c.key?'· 사용 중':'· 꺼짐'}</span></summary>
+ <label class="f">API 키</label><input id="gk" type="password" autocomplete="off" value="${esc(c.key||'')}" style="width:340px" onchange="gsave()">
+ <label class="f">모델 이름</label><input id="gm" value="${esc(c.model||'gemini-flash-latest')}" style="width:240px" onchange="gsave()">
+ <div class="row" style="margin-top:10px"><label><input id="go" type="checkbox" ${c.on?'checked':''} onchange="gsave()"> AI로 엑셀 구조 분석 사용</label><button class="btn s" onclick="gtest()">연결 시험</button></div>
+ <p class="mu">키는 이 PC의 브라우저에만 저장됩니다. 사용하면 엑셀의 위쪽 40줄(품명, 규격, 수량, 부서명 등)이 Google 서버로 전송됩니다. 개인정보나 내부 자료가 들어 있지 않은지 확인하고 기관 정책을 따르세요.</p></details>`}
+function gsave(){try{localStorage.setItem('emsAdminGem',JSON.stringify({key:$('#gk').value.trim(),model:$('#gm').value.trim(),on:$('#go').checked}))}catch(e){}}
+async function gone(model,text,ms){
+ const c=gcfg(),ac=new AbortController(),tm=setTimeout(()=>ac.abort(),ms||60000);
+ try{const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',signal:ac.signal,headers:{'Content-Type':'application/json','x-goog-api-key':c.key},body:JSON.stringify({contents:[{parts:[{text}]}],generationConfig:{temperature:0,responseMimeType:'application/json'}})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){const e=new Error((j.error&&j.error.message)||('HTTP '+r.status));e.st=r.status;throw e}
+  gUsed=model;return ((((j.candidates||[])[0]||{}).content||{}).parts||[]).map(x=>x.text||'').join('')}
+ catch(e){if(e&&e.name==='AbortError')throw new Error('응답 시간 초과 (네트워크 확인)');if(e&&e.name==='TypeError')throw new Error('연결이 차단되었습니다: '+e.message);throw e}
+ finally{clearTimeout(tm)}
+}
+async function gcall(text,ms){
+ const c=gcfg();if(!c.key)throw new Error('API 키가 없습니다');
+ if(!/^[\x21-\x7E]+$/.test(c.key))throw new Error('API 키 칸에 한글, 공백, 보이지 않는 문자가 섞여 있습니다. 키 칸을 비우고 AI Studio에서 키를 다시 복사해 붙여넣으세요.');
+ const ml=[c.model||'gemini-flash-latest','gemini-2.5-flash','gemini-flash-lite-latest'].filter((m,i,a)=>a.indexOf(m)===i);let last;
+ for(const m of ml)for(let t=0;t<2;t++){try{return await gone(m,text,ms)}catch(e){last=e;
+  const busy=e.st===503||e.st===429||e.st===500||/high demand|overloaded|unavailable/i.test(e.message);
+  if(e.st===404)break;if(!busy)throw e;if(t===0)await new Promise(r=>setTimeout(r,2500))}}
+ throw last}
+async function gtest(){gsave();try{await gcall('JSON으로 {"ok":true} 만 답하세요.',20000);alert('연결 성공 (사용된 모델: '+gUsed+')')}catch(e){alert('연결 실패: '+e.message)}}
+function guess(keepH){
+ const R=U.rows;let h=U.h;U.H=null;
+ if(!keepH){h=0;for(let i=0;i<Math.min(R.length,15);i++)if(R[i].filter(c=>String(c).trim()!=='').length>=3){h=i;break}}
+ U.h=h;const H=(R[h]||[]).map(c=>String(c).replace(/\s+/g,'')),f=re=>H.findIndex(x=>re.test(x));
+ const m={name:Math.max(0,f(/품명|품목|명칭|물품|물자/)),spec:f(/규격|사양|모델/),total:f(/총수량|총량|합계|총계|^계$|^총$/)};U.map=m;U.cm={};
+ H.forEach((x,i)=>{if(!x)return;const hn=x,isD=i!==m.name&&i!==m.spec&&i!==m.total&&R.slice(h+1).some(r=>r[i]!==''&&!isNaN(Number(r[i])));
+  const c=isD&&(S.centers.find(c=>ck(c.name)&&ck(c.name)===ck(hn))||S.centers.find(c=>ck(c.name)&&ck(hn)&&(ck(hn).includes(ck(c.name))||ck(c.name).includes(ck(hn)))));
+  U.cm[i]=!isD?'__skip':c?c.id:'__new'});
+}
+function parsed(){
+ const R=U.rows,m=U.map,out=[];let last='';
+ const dc=Object.keys(U.cm).map(Number).filter(i=>U.cm[i]!=='__skip'&&![m.name,m.spec,m.total].includes(i));
+ for(let i=U.h+1;i<R.length;i++){const r=R[i];let n=String(r[m.name]==null?'':r[m.name]).trim();
+  const sp=m.spec>=0?String(r[m.spec]==null?'':r[m.spec]).trim():'';
+  if(!n&&sp)n=last;if(n)last=n;
+  if(!n||/^(소계|합계|총계|계)$/.test(n.replace(/\s+/g,'')))continue;
+  const d=dc.map(c=>({c,q:num(r[c])})),sum=d.reduce((s,x)=>s+x.q,0),tot=m.total>=0&&r[m.total]!==''?num(r[m.total]):null;
+  out.push({n,sp,d,sum,tot,warn:tot!==null&&!isNaN(tot)&&tot!==sum,ln:i+1})}
+ return out;
+}
+function regSheet(label,cat,file,up){
+ const P=parsed().filter(x=>!(U.excl&&x.warn));if(!P.length)return null;
+ const cid={},H=hdr();
+ for(const c of Object.keys(U.cm).map(Number)){const v=U.cm[c];if(v==='__skip')continue;
+  if(v==='__new'){const nm=String(H[c]).trim();let e=S.centers.find(x=>ck(nm)&&ck(x.name)===ck(nm))||S.centers.find(x=>norm(x.name)===norm(nm));if(!e){e={id:uid(),name:nm};S.centers.push(e)}cid[c]=e.id}else cid[c]=v}
+ const b={id:uid(),label,date:ymd(new Date()),file,up,sheet:cat||''};S.batches.push(b);
+ let ni=0,ei=0,na=0;
+ P.forEach(x=>{let it=S.items.find(i=>norm(i.name)===norm(x.n)&&norm(i.spec)===norm(x.sp)&&norm(i.cat)===norm(cat));
+  if(it)ei++;else{it={id:uid(),name:x.n,spec:x.sp,cat:cat||''};S.items.push(it);ni++}
+  x.d.forEach(y=>{if(cid[y.c]&&y.q>0){S.allocs.push({id:uid(),batch:b.id,itemId:it.id,centerId:cid[y.c],qty:y.q});na++}})});
+ return {ni,ei,na};
+}
+function applyUp(){
+ snap();
+ const up=uid(),base=(U.name||'').trim()||('배정 '+ymd(new Date())),multi=U.order.length>1,picked=U.order.filter(n=>U.sel[n]),keep=U.sheet,res=[];
+ if(!picked.length)return alert('등록할 시트를 선택하세요.');
+ picked.forEach(n=>{loadSnap(n);const r=regSheet(multi?base+'_'+n:base,multi?n:'',base,up);if(r)res.push(Object.assign({n},r))});
+ if(!res.length){loadSnap(keep);return alert('등록할 줄이 없습니다.')}
+ save();resetU();vf=up;vs='';
+ note='“'+base+'” 등록 완료: '+res.map(r=>(multi?r.n+' — ':'')+'신규 품목 '+r.ni+'개, 기존 품목 '+r.ei+'개, 배정 '+r.na+'건').join(' / ');pg='dash';render();
+}
+function tpl(){const ws=XLSX.utils.aoa_to_sheet([['품명','규격','총수량','중앙센터','동부센터','서부센터'],['멸균 거즈','10x10cm',300,100,120,80],['탄력 붕대','7.5cm',150,50,50,50]]),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'배정');XLSX.writeFile(wb,'배정양식예시.xlsx')}
+function exportX(){
+ const s=scope(),ids=s.ids,tot=!ids,cs=S.centers,fl=s.fl;
+ const its=S.items.filter(i=>tot||S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch))).filter(i=>!vs||(i.cat||'__none')===vs);
+ const head=['분류','품명','규격',...cs.flatMap(c=>tot?[c.name+' 배정',c.name+' 수령',c.name+' 재고']:[c.name+' 배정']),'전체 배정',...(tot?['전체 수령','전체 재고',...fl.map(f=>'파일별 배정: '+f.name)]:[])];
+ const a=[head];
+ its.forEach(i=>{const t=sc(i.id,'',ids);a.push([i.cat||'',i.name,i.spec,...cs.flatMap(c=>{const x=sc(i.id,c.id,ids);return tot?[x.a,x.r,x.s]:[x.a]}),t.a,...(tot?[t.r,t.s,...fl.map(f=>sc(i.id,'',new Set(f.ids)).a)]:[])])});
+ const clean=x=>String(x).replace(/[\\\/\?\*\[\]:]/g,'_');
+ const ws=XLSX.utils.aoa_to_sheet(a),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,clean(tot?'총 합계':s.f.name).slice(0,31));
+ XLSX.writeFile(wb,'센터별현황_'+clean(tot?'총합계':s.f.name)+(vs?'_'+clean(catLabel(vs)):'')+'_'+ymd(new Date())+'.xlsx');
+}
+
+/* ---------- 센터 / 알림 / 시험 입력 ---------- */
+let cc='';
+function centers(){
+ const det=S.centers.find(c=>c.id===cc);
+ const items=c=>[...new Set(S.allocs.filter(a=>a.centerId===c).map(a=>a.itemId))];
+ const detail=det?`<h3 style="margin:18px 0 8px">${esc(det.name)} · 배정 품목</h3><div class="wrap"><table><tr><th>품명</th><th>규격</th><th>분류</th><th class="c">배정</th><th class="c">수령</th><th class="c">재고</th><th>배정 이름</th></tr>${items(det.id).map(id=>{
+   const i=S.items.find(x=>x.id===id)||{name:'?',spec:''},t=stat(id,det.id),bs=[...new Set(S.allocs.filter(a=>a.centerId===det.id&&a.itemId===id).map(a=>(S.batches.find(b=>b.id===a.batch)||{}).label||''))];
+   return `<tr><td><b>${esc(i.name)}</b></td><td>${esc(i.spec)}</td><td>${esc(i.cat||'')}</td><td class="c">${t.a}</td><td class="c">${t.r}</td><td class="c">${t.s}</td><td>${esc(bs.join(', '))}</td></tr>`}).join('')||'<tr><td colspan="7" class="mu">배정된 품목이 없습니다.</td></tr>'}</table></div>`:'';
+ return `<h2>안전센터 관리</h2><div class="row"><input id="nc" placeholder="새 센터 이름"><button class="btn" onclick="addC()">추가</button></div>
+ <div class="wrap"><table><tr><th>센터</th><th>로그인 계정(이메일)</th><th class="c">배정 품목 수</th><th class="c">배정 수량 합</th><th class="c">재고 로트</th><th></th></tr>${S.centers.map(c=>`<tr><td><b>${esc(c.name)}</b></td><td style="white-space:nowrap"><input id="ce_${c.id}" value="${esc(c.email||'')}" placeholder="center1@test.com" style="width:190px"> <button class="btn s" onclick="setEmail('${c.id}')">연결</button></td><td class="c">${items(c.id).length}</td><td class="c">${S.allocs.filter(a=>a.centerId===c.id).reduce((s,a)=>s+a.qty,0)}</td><td class="c">${S.lots.filter(l=>l.centerId===c.id&&l.qty>0).length}</td><td><button class="btn s" onclick="cc=cc==='${c.id}'?'':'${c.id}';render()">${cc===c.id?'닫기':'품목 보기'}</button> <button class="btn s" onclick="renC('${c.id}')">이름 변경</button> <button class="btn s" onclick="delC('${c.id}')">삭제</button></td></tr>`).join('')||'<tr><td colspan="6" class="mu">센터가 없습니다.</td></tr>'}</table></div>
+ ${detail}
+ <p class="mu">엑셀의 부서명과 센터 이름을 맞춰 주는 기준이 됩니다. “품목 보기”를 누르면 그 센터에 배정된 품명과 규격이 보입니다. 센터 로그인 계정은 Firebase 콘솔에서 만든 이메일을 여기서 센터와 연결합니다.</p>`}
+function setEmail(id){
+ const c=S.centers.find(x=>x.id===id),v=($('#ce_'+id).value||'').trim().toLowerCase();
+ if(v&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))return alert('이메일 형식이 아닙니다.');
+ if(v&&S.centers.some(x=>x.id!==id&&(x.email||'')===v))return alert('다른 센터에 이미 연결된 계정입니다.');
+ const old=c.email||'';c.email=v;save();
+ if(!CLOUD){note='계정 이메일을 저장했습니다. (로컬 모드라 서버 로그인에는 연결되지 않습니다)';return render()}
+ const ps=[];if(old&&old!==v)ps.push(Cloud.delMember(old));if(v)ps.push(Cloud.setMember(v,{role:'center',centerId:id,org:ORG}));
+ Promise.all(ps).then(()=>{note=v?'“'+c.name+'”에 '+v+' 계정을 연결했습니다.':'계정 연결을 해제했습니다.';render()}).catch(e=>alert('계정 연결 실패: '+e.message))}
+function addC(){const n=$('#nc').value.trim();if(!n)return;if(S.centers.some(c=>norm(c.name)===norm(n)))return alert('같은 이름의 센터가 있습니다.');S.centers.push({id:uid(),name:n});save();render()}
+function renC(id){const c=S.centers.find(x=>x.id===id),n=prompt('센터 이름',c.name);if(n&&n.trim()){c.name=n.trim();save();render()}}
+function delC(id){if(S.allocs.some(a=>a.centerId===id)||S.lots.some(l=>l.centerId===id))return alert('배정이나 재고 기록이 있는 센터는 삭제할 수 없습니다.');S.centers=S.centers.filter(c=>c.id!==id);save();render()}
+const LT={in:'입고',out:'출고',fix:'수정'};
+function logsV(){
+ if(!CLOUD)return '<h2>입출고 이력</h2><div class="box mu">서버에 로그인하면 센터 휴대폰 앱의 입고·출고 기록이 여기에 표시됩니다.</div>';
+ const L=LG.filter(g=>!lc||g.centerId===lc);
+ return `<h2>입출고 이력</h2><div class="row"><select onchange="lc=this.value;render()"><option value="">모든 센터</option>${S.centers.map(c=>`<option value="${c.id}" ${lc===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select><span class="mu">최근 300건까지 표시합니다.</span></div>
+ <div class="wrap"><table><tr><th>일시</th><th>센터</th><th>구분</th><th>품목</th><th>규격</th><th class="c">수량</th><th>유효기간</th><th>담당자</th><th>메모</th></tr>${L.map(g=>{const i=S.items.find(x=>x.id===g.itemId)||{};return `<tr${g.voided?' style="opacity:.5;text-decoration:line-through"':''}><td>${esc(g.ts)}</td><td>${esc(nameOf('centers',g.centerId))}</td><td>${LT[g.type]||esc(g.type)}</td><td>${esc(i.name||'?')}</td><td>${esc(i.spec||'')}</td><td class="c">${g.d>0?'+':''}${g.d}</td><td>${esc(g.exp||'')}</td><td>${esc(g.user)}</td><td style="white-space:normal">${esc(g.note||'')}</td></tr>`}).join('')||'<tr><td colspan="9" class="mu">기록이 없습니다.</td></tr>'}</table></div>`}
+function alertsV(){const L=alerts();
+ return `<h2>알림 · 유효기간</h2><div class="wrap"><table><tr><th>센터</th><th>품목</th><th>규격</th><th>유효기간</th><th>상태</th><th class="c">남은 수량</th></tr>${L.map(l=>{const d=dleft(l.exp),i=S.items.find(x=>x.id===l.itemId)||{};return `<tr><td>${esc(nameOf('centers',l.centerId))}</td><td>${esc(i.name)}</td><td>${esc(i.spec)}</td><td>${l.exp}</td><td>${d<0?'<span class="tag t-er">만료</span>':'<span class="tag t-wn">D-'+d+'</span>'}</td><td class="c">${l.qty}</td></tr>`}).join('')||'<tr><td colspan="6" class="mu">임박하거나 만료된 재고가 없습니다.</td></tr>'}</table></div>`}
+function sim(){
+ const co=`<option value="">센터 선택</option>${S.centers.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}`,io=`<option value="">품목 선택</option>${S.items.map(i=>`<option value="${i.id}">${esc(i.name)} ${esc(i.spec)}</option>`).join('')}`;
+ return `<h2>시험 입력 (센터 앱 대신)</h2><p class="mu">실제로는 센터 휴대폰 앱에서 입력됩니다. 관리자 화면이 어떻게 바뀌는지 확인하려고 여기서 대신 입력해 볼 수 있어요.</p>
+ <div class="box"><b>수령(입고)</b><div class="row" style="margin-top:8px"><select id="s1">${co}</select><select id="s2">${io}</select><input id="s3" type="date"><input id="s4" type="number" min="1" placeholder="수량" style="width:90px"><button class="btn" onclick="simIn()">수령 입력</button></div></div>
+ <div class="box" style="margin-top:12px"><b>출고(사용)</b><div class="row" style="margin-top:8px"><select id="o1">${co}</select><select id="o2">${io}</select><input id="o4" type="number" min="1" placeholder="수량" style="width:90px"><button class="btn" onclick="simOut()">출고 입력</button></div><span class="mu">유효기간이 빠른 재고부터 차감합니다.</span></div>`}
+function simIn(){const c=$('#s1').value,i=$('#s2').value,e=$('#s3').value,q=parseInt($('#s4').value,10);if(!c||!i||!e||!(q>0))return alert('센터, 품목, 유효기간, 수량을 모두 입력하세요.');
+ S.lots.push({id:uid(),itemId:i,centerId:c,exp:e,rec:q,qty:q,date:ymd(new Date())});save();note='수령 입력 완료';pg='dash';render()}
+function simOut(){const c=$('#o1').value,i=$('#o2').value;let q=parseInt($('#o4').value,10);if(!c||!i||!(q>0))return alert('센터, 품목, 수량을 입력하세요.');
+ const L=S.lots.filter(l=>l.itemId===i&&l.centerId===c&&l.qty>0).sort((a,b)=>a.exp<b.exp?-1:1);if(L.reduce((s,l)=>s+l.qty,0)<q)return alert('재고가 부족합니다.');
+ for(const l of L){const t=Math.min(l.qty,q);l.qty-=t;q-=t;if(!q)break}save();note='출고 입력 완료';pg='dash';render()}
+function demo(){
+ S={centers:S.centers,items:[],batches:[],allocs:[],lots:[]};vf='';vs='';
+ const cn=['중앙','동부','서부','남부','북부','신도시'].map(n=>{n+='안전센터';let c=S.centers.find(x=>x.name===n);if(!c){c={id:uid(),name:n};S.centers.push(c)}return c});
+ const it=[['멸균 거즈','10x10cm','소모품',[60,50,50,40,40,60],[20,20,20,20,20,20]],['탄력 붕대','7.5cm','소모품',[30,30,20,20,20,30],null],['일회용 장갑','M 100매','소모품',[10,10,10,8,8,10],[5,5,5,5,5,5]],['생리식염수','500ml','의약품',[20,20,16,16,16,20],[10,10,10,10,10,10]],['산소마스크','성인용','소모품',[8,8,6,6,6,8],null],['삼각건','표준','소모품',[10,10,10,10,10,10],null]].map(a=>({id:uid(),name:a[0],spec:a[1],cat:a[2],q1:a[3],q2:a[4]}));
+ S.items=it.map(a=>({id:a.id,name:a.name,spec:a.spec,cat:a.cat}));
+ const ups={'샘플 1차 배정':uid(),'샘플 2차 배정':uid()},bt={};
+ const getB=(nm,cat)=>bt[nm+cat]||(bt[nm+cat]=(()=>{const b={id:uid(),label:nm+'_'+cat,date:ymd(new Date()),file:nm,up:ups[nm],sheet:cat};S.batches.push(b);return b})());
+ it.forEach((a,k)=>cn.forEach((c,j)=>{S.allocs.push({id:uid(),batch:getB('샘플 1차 배정',a.cat).id,itemId:a.id,centerId:c.id,qty:a.q1[j]});
+  if(a.q2)S.allocs.push({id:uid(),batch:getB('샘플 2차 배정',a.cat).id,itemId:a.id,centerId:c.id,qty:a.q2[j]});
+  if((j+k)%3!==0){const r=Math.round(a.q1[j]*(j%2?1:.6)),ex=addD([-10,40,300,500][(j+k)%4]);S.lots.push({id:uid(),itemId:a.id,centerId:c.id,exp:ex,rec:r,qty:Math.max(0,r-Math.round(r*.15)),date:addD(-20)})}}));
+ save();note='샘플 데이터를 넣었습니다.';render()}
+
+const PG={dash:['현황',dash],upload:['엑셀 업로드',upload],centers:['센터 관리',centers],alerts:['알림',alertsV],logs:['입출고 이력',logsV],sim:['시험 입력',sim],item:['품목 수정',itemV]};
+/* ---------- 초기화 · 품목 수량 수정 ---------- */
+function resetData(all){
+ const n='품목 '+S.items.length+'개, 배정 '+S.allocs.length+'건, 재고 기록 '+S.lots.length+'건'+(all?', 센터 '+S.centers.length+'개':'');
+ if(!confirm('다음 내용을 모두 지웁니다.\n\n'+n+'\n\n'+(all?'':'센터 목록은 남겨 둡니다.\n')+'되돌릴 수 없습니다. 지우기 전에 “엑셀로 내려받기”로 백업해 두셨나요?\n\n계속할까요?'))return;
+ S.items=[];S.allocs=[];S.lots=[];S.batches=[];if(all)S.centers=[];
+ fc='';q='';cc='';vf='';vs='';save();note=all?'전체를 초기화했습니다.':'현황을 초기화했습니다. 센터 목록은 그대로입니다.';pg='dash';render();
+}
+let ei='';
+function editItem(id){ei=id;pg='item';note='';render()}
+const intV=id=>{const e=$(id),v=e?String(e.value).trim():'',n=Number(v);return v!==''&&Number.isInteger(n)&&n>=0?n:null};
+function itemV(){
+ const it=S.items.find(i=>i.id===ei);if(!it){pg='dash';return dash()}
+ const al=S.allocs.filter(a=>a.itemId===ei),lo=S.lots.filter(l=>l.itemId===ei).sort((a,b)=>a.exp<b.exp?-1:1);
+ const bl=b=>(S.batches.find(x=>x.id===b)||{}).label||'';
+ const co=sel=>S.centers.map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${esc(c.name)}</option>`).join('');
+ const t=stat(ei);
+ return `${note?`<div class="msg">${esc(note)}</div>`:''}<h2>품목 수정 · ${esc(it.name)} ${esc(it.spec)}</h2>
+ <div class="row"><button class="btn s" onclick="pg='dash';note='';render()">← 현황으로</button><span class="mu">전체 배정 ${t.a} · 수령 ${t.r} · 재고 ${t.s}</span></div>
+ <div class="box"><b>품목 정보</b><div class="g2"><div><label class="f">품명</label><input id="m1" value="${esc(it.name)}" style="width:100%"></div><div><label class="f">규격</label><input id="m2" value="${esc(it.spec)}" style="width:100%"></div><div><label class="f">분류</label><input id="m3" value="${esc(it.cat||'')}" style="width:100%"></div></div>
+ <div class="row" style="margin-top:12px"><button class="btn" onclick="saveItem()">품목 정보 저장</button><button class="btn s" onclick="delItem()">품목 삭제</button></div></div>
+ <h3 style="margin:18px 0 8px">배정 수량</h3>
+ <div class="wrap"><table><tr><th>배정 이름</th><th>센터</th><th>수량</th><th></th></tr>${al.map(a=>`<tr><td>${esc(bl(a.batch))}</td><td>${esc(nameOf('centers',a.centerId))}</td><td><input id="aq_${a.id}" type="number" min="0" inputmode="numeric" value="${a.qty}" style="width:90px"></td><td><button class="btn s" onclick="saveAlloc('${a.id}')">저장</button> <button class="btn s" onclick="delAlloc('${a.id}')">삭제</button></td></tr>`).join('')||'<tr><td colspan="4" class="mu">배정이 없습니다.</td></tr>'}
+ <tr><td class="mu">새 배정 추가</td><td><select id="nac"><option value="">센터 선택</option>${co('')}</select></td><td><input id="naq" type="number" min="1" inputmode="numeric" placeholder="수량" style="width:90px"></td><td><button class="btn" onclick="addAlloc()">추가</button></td></tr></table></div>
+ <h3 style="margin:18px 0 8px">수령 · 재고 수량</h3>
+ <div class="wrap"><table><tr><th>센터</th><th>유효기간</th><th>수령</th><th>재고</th><th></th></tr>${lo.map(l=>`<tr><td>${esc(nameOf('centers',l.centerId))}</td><td>${esc(l.exp)}</td><td><input id="lr_${l.id}" type="number" min="0" inputmode="numeric" value="${l.rec}" style="width:80px"></td><td><input id="lq_${l.id}" type="number" min="0" inputmode="numeric" value="${l.qty}" style="width:80px"></td><td><button class="btn s" onclick="saveLot('${l.id}')">저장</button> <button class="btn s" onclick="delLot('${l.id}')">삭제</button></td></tr>`).join('')||'<tr><td colspan="5" class="mu">수령·재고 기록이 없습니다.</td></tr>'}</table></div>
+ <p class="mu">수량을 바꾸면 현황 표에 바로 반영됩니다. 이 프로그램은 서버가 없어서 수정 이력은 남지 않으니, 중요한 변경 전에는 엑셀로 내려받아 두세요.</p>`;
+}
+function saveItem(){
+ const it=S.items.find(i=>i.id===ei);if(!it)return;
+ const n=$('#m1').value.trim(),sp=$('#m2').value.trim(),ct=$('#m3').value.trim();
+ if(!n)return alert('품명을 입력하세요.');
+ if(S.items.some(x=>x.id!==it.id&&norm(x.name)===norm(n)&&norm(x.spec)===norm(sp)&&norm(x.cat)===norm(ct)))return alert('같은 품명·규격·분류의 품목이 이미 있습니다.');
+ it.name=n;it.spec=sp;it.cat=ct;save();note='품목 정보를 저장했습니다.';render();
+}
+function saveAlloc(id){
+ const a=S.allocs.find(x=>x.id===id),n=intV('#aq_'+id);if(!a)return;
+ if(n===null)return alert('수량은 0 이상의 정수로 입력하세요.');
+ a.qty=n;save();note='배정 수량을 저장했습니다.';render();
+}
+function delAlloc(id){if(!confirm('이 배정을 삭제할까요?'))return;S.allocs=S.allocs.filter(a=>a.id!==id);save();note='배정을 삭제했습니다.';render()}
+function addAlloc(){
+ const c=$('#nac').value,n=intV('#naq');
+ if(!c)return alert('센터를 선택하세요.');
+ if(n===null||n<1)return alert('수량은 1 이상의 정수로 입력하세요.');
+ let b=S.batches.find(x=>x.label==='수동 추가');if(!b){b={id:uid(),label:'수동 추가',date:ymd(new Date())};S.batches.push(b)}
+ S.allocs.push({id:uid(),batch:b.id,itemId:ei,centerId:c,qty:n});save();note='배정을 추가했습니다.';render();
+}
+function saveLot(id){
+ const l=S.lots.find(x=>x.id===id),r=intV('#lr_'+id),n=intV('#lq_'+id);if(!l)return;
+ if(r===null||n===null)return alert('수량은 0 이상의 정수로 입력하세요.');
+ if(n>r&&!confirm('재고('+n+')가 수령('+r+')보다 많습니다. 그래도 저장할까요?'))return;
+ l.rec=r;l.qty=n;save();note='수령·재고 수량을 저장했습니다.';render();
+}
+function delLot(id){if(!confirm('이 수령·재고 기록을 삭제할까요?'))return;S.lots=S.lots.filter(l=>l.id!==id);save();note='기록을 삭제했습니다.';render()}
+function delItem(){
+ const it=S.items.find(i=>i.id===ei);if(!it)return;
+ if(S.lots.some(l=>l.itemId===ei&&(l.qty>0||l.rec>0)))return alert('수령·재고 기록이 남아 있는 품목은 삭제할 수 없습니다. 아래 수령·재고 기록을 먼저 삭제하세요.');
+ if(!confirm('“'+it.name+'” 품목과 그 배정을 모두 삭제할까요? 되돌릴 수 없습니다.'))return;
+ S.items=S.items.filter(i=>i.id!==ei);S.allocs=S.allocs.filter(a=>a.itemId!==ei);S.lots=S.lots.filter(l=>l.itemId!==ei);
+ save();ei='';pg='dash';note='품목을 삭제했습니다.';render();
+}
+function goP(k){pg=k;note='';if(k==='upload')U.rows=null;render()}
+let theme='auto';try{theme=localStorage.getItem('emsTheme')||'auto'}catch(e){}
+function applyTheme(){const r=document.documentElement;if(r&&r.setAttribute){if(theme==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',theme)}
+ const e=$('#th');if(e)e.innerHTML=[['light','☀ 라이트'],['dark','🌙 다크'],['auto','자동']].map(a=>`<button class="btn s ${theme===a[0]?'on':''}" style="padding:4px 6px;min-height:30px;font-size:12px;justify-content:center" onclick="setTheme('${a[0]}')">${a[1]}</button>`).join('')}
+function setTheme(t){theme=t;try{localStorage.setItem('emsTheme',t)}catch(e){}applyTheme()}
+function render(){applyTheme();csBox();
+ $('#n').innerHTML=Object.keys(PG).filter(k=>k!=='item').map(k=>`<button class="${k===pg||(pg==='item'&&k==='dash')?'on':''}" onclick="goP('${k}')">${PG[k][0]}${k==='alerts'&&alerts().length?`<span class="tag t-wn">${alerts().length}</span>`:''}</button>`).join('');
+ $('#v').innerHTML=PG[pg][1]();
+}
+render();
+if(MODE!=='local'){lg('');if(!Cloud.init('admin')){lg('서버 연결 도구를 불러오지 못했습니다. 인터넷 연결을 확인하거나 로컬 모드를 사용하세요.')}else Cloud.onAuth(afterAuth)}
+</script></body></html>

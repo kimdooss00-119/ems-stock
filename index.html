@@ -1,11 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#c8312b">
-<meta name="mobile-web-app-capable" content="yes">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
 <title>구급 소모품 관리</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -49,11 +44,19 @@ body.pc .app{max-width:1000px;padding-bottom:24px}body.pc .who,body.pc nav{displ
 body.pc details.card summary{cursor:default}
 @media(max-width:480px){.sum{grid-template-columns:repeat(2,1fr)}}
 </style></head><body>
+<div id="lg" style="position:fixed;inset:0;background:var(--bg);display:none;z-index:99;align-items:center;justify-content:center;padding:16px"><div class="card" style="width:min(380px,100%)"><h1 style="font-size:18px;margin:0 0 4px">🚑 센터 로그인</h1><div class="mu" style="margin-bottom:8px">센터 계정으로 로그인합니다.</div>
+<label>이메일</label><input id="le" type="email" autocomplete="username" style="width:100%"><label>비밀번호</label><input id="lp" type="password" autocomplete="current-password" style="width:100%" onkeydown="if(event.key==='Enter')doLogin()">
+<div id="lm" class="mu" style="color:var(--er);min-height:20px;margin:8px 0"></div><button class="btn" style="width:100%" onclick="doLogin()">로그인</button>
+<button class="btn s" style="width:100%;margin-top:8px" onclick="useLocal()">로그인 없이 이 기기에서만 사용</button><div class="mu" style="margin-top:8px">로컬 모드는 서버와 연결되지 않고 이 기기에만 저장됩니다.</div></div></div>
 <div class="app">
 <header><h1>구급 소모품 관리</h1><div class="who">담당자 <input id="u" aria-label="담당자 이름" placeholder="이름"></div></header>
+<div id="cs" class="mu" style="margin:6px 0"></div>
 <main id="v"></main>
 </div>
 <nav id="n"></nav>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
 <script>
 const K='emsStockV2',WARN=90;
 const $=s=>document.querySelector(s);
@@ -71,9 +74,62 @@ function seed(){
  const logs=lots.map(l=>({id:uid(),ts:l.inDate+' 09:00',type:'in',itemId:l.itemId,lotId:l.id,exp:l.exp,d:l.qty,note:'기초 재고',user:'관리자',synced:false,voided:false}));
  return {items:[],lots:[],logs:[],user:'',lastSync:''};
 }
+const MK='emsModePhone',MODE=(()=>{try{return localStorage.getItem(MK)||''}catch(e){return ''}})();
 let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
 if(!S||!S.items)S=seed();
-const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){msg('저장 공간이 부족해 저장하지 못했습니다. 사진 수를 줄이거나 기록을 정리하세요.')}};
+let CLOUD=false,CID='',CNAME='',RI=[],rtm=0;
+const persist=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){msg('저장 공간이 부족해 저장하지 못했습니다. 사진 수를 줄이거나 기록을 정리하세요.')}};
+const IT_MAP=o=>({name:o.name,unit:o.unit||'개',spec:o.spec||'',cat:o.cat||'',createdBy:o.createdBy});
+const save=()=>{persist();if(CLOUD){Cloud.push('lots',S.lots);Cloud.push('logs',S.logs);Cloud.push('items',S.items.filter(i=>i.createdBy===CID),{noDelete:true})}};
+const dn=i=>esc(i.name)+(i.spec?' '+esc(i.spec):'');
+/* ---------- 클라우드 (Firebase) 연동 ---------- */
+const FB_CFG={apiKey:"AIzaSyBnusgNeBvlhoZQquf4Sr08E5vqV_G8NV8",authDomain:"ems-stock-277e5.firebaseapp.com",projectId:"ems-stock-277e5",storageBucket:"ems-stock-277e5.firebasestorage.app",messagingSenderId:"1026035896295",appId:"1:1026035896295:web:cfc924b78b2dd1a3ea7742"};
+const ORG='main',BOOT_ADMIN='admin@test.com';
+const Cloud=(()=>{
+ let auth=null,db=null,cfg={},prev={},ready={},unsubs=[];
+ const stable=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((a,x)=>(a[x]=v[x],a),{}):v);
+ const strip=o=>{const r=JSON.parse(JSON.stringify(o));delete r.id;return r};
+ const mk=(n,x)=>JSON.parse(JSON.stringify(cfg[n].map(strip(x))));
+ const api={err:'',onErr:null,
+  ok:()=>typeof firebase!=='undefined',
+  init(appName){if(db)return true;if(!api.ok())return false;
+   const app=firebase.initializeApp(FB_CFG,appName);auth=app.auth();db=app.firestore();
+   try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
+   return true},
+  email:()=>{const u=auth&&auth.currentUser;return u?String(u.email||'').toLowerCase():''},
+  login:(e,p)=>auth.signInWithEmailAndPassword(e,p),
+  logout(){api.stop();return auth.signOut()},
+  onAuth:cb=>auth.onAuthStateChanged(cb),
+  col:n=>db.collection('orgs').doc(ORG).collection(n),
+  member:()=>db.collection('members').doc(api.email()).get().then(d=>d.exists?d.data():null),
+  setMember:(e,d)=>db.collection('members').doc(e.toLowerCase()).set(d),
+  delMember:e=>db.collection('members').doc(e.toLowerCase()).delete(),
+  fail(m){api.err=m;console.error(m);if(api.onErr)api.onErr(m)},
+  watch(name,o){
+   cfg[name]={norm:o.norm||(x=>x),map:o.map||(x=>x)};prev[name]=new Map();ready[name]=false;
+   const ref=o.q?o.q(api.col(name)):api.col(name);
+   unsubs.push(ref.onSnapshot(s=>{
+    const arr=[],m=new Map();
+    s.forEach(d=>{const x=cfg[name].norm(Object.assign({},d.data(),{id:d.id}));arr.push(x);m.set(d.id,stable(mk(name,x)))});
+    prev[name]=m;ready[name]=true;o.cb(arr)
+   },e=>api.fail('읽기 실패('+name+'): '+e.message)))},
+  watchDoc(name,id,cb){unsubs.push(api.col(name).doc(id).onSnapshot(d=>cb(d.exists?d.data():null),e=>api.fail('읽기 실패('+name+'): '+e.message)))},
+  isReady:n=>!!ready[n],
+  push(name,arr,o){
+   o=o||{};if(!ready[name])return false;
+   const sets=[],dels=[],cur=new Map();
+   arr.forEach(x=>{const d=mk(name,x),s=stable(d);cur.set(x.id,s);if(prev[name].get(x.id)!==s)sets.push([x.id,d])});
+   if(!o.noDelete)prev[name].forEach((s,id)=>{if(!cur.has(id))dels.push(id)});
+   if(!sets.length&&!dels.length)return true;
+   sets.forEach(p=>prev[name].set(p[0],cur.get(p[0])));dels.forEach(id=>prev[name].delete(id));
+   const ops=sets.map(p=>[0,p[0],p[1]]).concat(dels.map(id=>[1,id])),ref=api.col(name);
+   for(let i=0;i<ops.length;i+=400){const b=db.batch();ops.slice(i,i+400).forEach(p=>p[0]?b.delete(ref.doc(p[1])):b.set(ref.doc(p[1]),p[2]));b.commit().catch(e=>api.fail('저장 실패('+name+'): '+e.message))}
+   return true},
+  stop(){unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];ready={};prev={};cfg={}}
+ };
+ return api})();
+const loginErr=e=>{const c=e&&e.code||'';return /invalid-credential|wrong-password|user-not-found|invalid-email/.test(c)?'이메일 또는 비밀번호가 맞지 않습니다.':c==='auth/network-request-failed'?'네트워크 연결을 확인하세요.':c==='auth/too-many-requests'?'시도가 너무 많습니다. 잠시 뒤에 다시 하세요.':'로그인 실패: '+((e&&e.message)||e)};
+
 const item=id=>S.items.find(i=>i.id===id)||{name:'?',unit:''};
 const lotsOf=id=>S.lots.filter(l=>l.itemId===id&&l.qty>0).sort((a,b)=>a.exp<b.exp?-1:1);
 const total=id=>lotsOf(id).reduce((s,l)=>s+l.qty,0);
@@ -117,7 +173,7 @@ function saveLot(){
  if(om!==mm)ch.push('메모 변경');
  if(!ch.length){ed=null;return render()}
  const dq=q-l.qty;
- l.inDate=dt;l.exp=ex;l.qty=q;l.memo=mm;
+ l.rec=(l.rec==null?l.qty:l.rec)+dq;l.inDate=dt;l.exp=ex;l.qty=q;l.memo=mm;
  S.logs.push({id:uid(),ts:now(),type:'fix',itemId:l.itemId,lotId:l.id,exp:ex,d:dq,date:ymd(new Date()),note:'수정: '+ch.join(', '),user:u,synced:false,voided:false});
  save();ed=null;msg('수정 저장 완료');render();
 }
@@ -129,14 +185,14 @@ function stock(){
   const ex=ls.filter(l=>dleft(l.exp)<0),sn=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN);
   const ok=t-ex.reduce((s,l)=>s+l.qty,0);
   exp+=ex.length;soon+=sn.length;
-  return `<details class="card"><summary><div style="display:flex;gap:10px;align-items:center"><div style="flex:none">${thumb(it)}</div><div style="flex:1;min-width:0"><div class="row"><b>${esc(it.name)}</b><span><b class="num">${t}</b> ${esc(it.unit)}</span></div>
-  <div class="mu">사용 가능 ${ok} · 최근 출고일 ${lastOut(it.id)}
+  return `<details class="card"><summary><div style="display:flex;gap:10px;align-items:center"><div style="flex:none">${thumb(it)}</div><div style="flex:1;min-width:0"><div class="row"><b>${dn(it)}</b><span><b class="num">${t}</b> ${esc(it.unit)}</span></div>
+  <div class="mu">${(()=>{const A=(S.allocs||[]).filter(a=>a.itemId===it.id).reduce((s,a)=>s+a.qty,0);return A?'배정 '+A+' · 입고 '+S.lots.filter(l=>l.itemId===it.id).reduce((s,l)=>s+(l.rec==null?l.qty:l.rec),0)+' · ':''})()}사용 가능 ${ok} · 최근 출고일 ${lastOut(it.id)}
   ${ex.length?'<span class="tag t-er">만료 '+ex.length+'건</span>':''}${sn.length?'<span class="tag t-wn">임박 '+sn.length+'건</span>':''}</div></div></div></summary>
   <div style="display:flex;gap:8px;margin-top:10px"><button class="btn s" onclick="goIn('${it.id}')">+ 입고</button><button class="btn s" ${t>0?'':'disabled'} onclick="goOut('${it.id}')">− 출고</button></div>
   <div class="wrap"><table><tr><th>입고일</th><th>입고 담당</th><th>유효기간</th><th>남은 일</th><th class="num">수량</th><th></th></tr>${ls.map(l=>{const d=dleft(l.exp);return `<tr><td>${l.inDate||'-'}${memoOf(l)?'<div class="mu">'+esc(memoOf(l))+'</div>':''}</td><td>${esc(inUser(l))}</td><td>${l.exp}</td><td>${d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">D-'+d+'</span>':'D-'+d}</td><td class="num">${l.qty}</td><td><button class="btn s" onclick="editLot('${l.id}')">수정</button></td></tr>`}).join('')||'<tr><td colspan="6" class="mu">재고 없음</td></tr>'}</table></div></details>`}).join('');
  return `<div class="sum"><div><b>${S.items.length}</b><span>관리 품목</span></div><div><b>${tq}</b><span>총 재고 수량</span></div><div class="${soon?'warn':''}"><b>${soon}</b><span>${WARN}일 내 임박</span></div><div class="${exp?'bad':''}"><b>${exp}</b><span>만료 (폐기 대상)</span></div></div>${rows||'<div class="card mu">등록된 품목이 없습니다. 아래 입고 탭에서 새 품목을 등록하고 입고하세요.</div>'}
  <p class="mu">같은 품목도 입고일·유효기간이 다르면 따로 관리하며, 출고할 때 어느 입고분에서 뺄지 직접 선택합니다.</p>
- <button class="btn s" onclick="if(confirm('모든 품목과 기록을 삭제할까요? 되돌릴 수 없습니다.')){S=seed();save();render()}">전체 데이터 삭제</button>`;
+ ${CLOUD?'':'<button class="btn s" onclick="if(confirm(\'모든 품목과 기록을 삭제할까요? 되돌릴 수 없습니다.\')){S=seed();save();render()}">전체 데이터 삭제</button>'}`;
 }
 let ph=null,phCv=null,pendKey='',pendImg='',phMsg='',phAdd=false,phOnly='';
 function phExpOnly(){const v=$('#psel').value;if(!v)return msg('먼저 품목을 선택하세요.');phAdd=false;phOnly=v;$('#ph').click()}
@@ -147,7 +203,7 @@ function photoBox(){
  <input id="ph" type="file" accept="image/*" capture="environment" hidden onchange="onPhoto(this.files[0])">
  <button class="btn" onclick="phAdd=false;phOnly='';$('#ph').click()">사진 찍기</button>
  <div class="mu" style="margin-top:12px">이미 등록된 품목은 유효기간이 적힌 면만 찍어도 됩니다.</div>
- ${S.items.length?`<div class="row" style="gap:8px;margin-top:6px"><select id="psel" style="flex:1"><option value="">품목 선택…</option>${S.items.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('')}</select><button class="btn s" style="min-height:44px" onclick="phExpOnly()">유효기간 면만 찍기</button></div>`:''}<div id="phr">${phHtml()}</div>${gemBox()}</div>`;
+ ${S.items.length?`<div class="row" style="gap:8px;margin-top:6px"><select id="psel" style="flex:1"><option value="">품목 선택…</option>${S.items.map(i=>`<option value="${i.id}">${dn(i)}</option>`).join('')}</select><button class="btn s" style="min-height:44px" onclick="phExpOnly()">유효기간 면만 찍기</button></div>`:''}<div id="phr">${phHtml()}</div>${gemBox()}</div>`;
 }
 const rectCss=r=>r?`display:block;left:${r.x0*100}%;top:${r.y0*100}%;width:${(r.x1-r.x0)*100}%;height:${(r.y1-r.y0)*100}%`:'display:none';
 function phHtml(){
@@ -161,7 +217,7 @@ function phHtml(){
   pick='<div class="mu" style="margin-top:8px">품목을 골라 주세요</div>'
    +(ph.cands||[]).map(id=>`<button class="btn s" style="margin:6px 6px 0 0" onclick="phPick('${id}')">${esc(item(id).name)}</button>`).join('')
    +(ph.lines||[]).map((x,i)=>`<button class="btn s" style="margin:6px 6px 0 0" onclick="phNew(${i})">새 품목: ${esc(x)}</button>`).join('')
-   +(S.items.length?`<select style="margin-top:8px" onchange="phPick(this.value)"><option value="">등록된 품목에서 고르기…</option>${S.items.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('')}</select>`:'')
+   +(S.items.length?`<select style="margin-top:8px" onchange="phPick(this.value)"><option value="">등록된 품목에서 고르기…</option>${S.items.map(i=>`<option value="${i.id}">${dn(i)}</option>`).join('')}</select>`:'')
    +'<button class="btn s" style="margin:8px 0 0" onclick="phOwn()">새 품목으로 직접 입력</button>';
  }else pick='<button class="btn s" style="margin-top:8px" onclick="phChg()">품목 다시 고르기</button>';
  const tx=ph.text?`<details style="margin-top:8px"><summary class="mu">읽은 글자 전체 보기</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(ph.text)}</pre></details>`:'';
@@ -369,7 +425,7 @@ async function phRegion(){
 }
 function phNo(){ph=null;phCv=null;pendKey='';pendImg='';phAdd=false;phOnly='';phMsg='';const f=$('#ph');if(f)f.value='';phDraw()}
 function inView(){
- return photoBox()+`<label for="i1">품목</label><select id="i1" onchange="$('#nw').style.display=this.value==='_new'?'block':'none'">${S.items.map(i=>`<option value="${i.id}">${esc(i.name)} (${esc(i.unit)})</option>`).join('')}<option value="_new">+ 새 품목 등록</option></select>
+ return photoBox()+`<label for="i1">품목</label><select id="i1" onchange="$('#nw').style.display=this.value==='_new'?'block':'none'">${S.items.map(i=>`<option value="${i.id}">${dn(i)} (${esc(i.unit)})</option>`).join('')}<option value="_new">+ 새 품목 등록</option></select>
  <div id="nw" style="display:${S.items.length?'none':'block'}"><label for="i2">새 품목명</label><input id="i2"><label for="i3">단위 (예: 개, 장)</label><input id="i3" value="개"></div>
  <label for="i8">입고일</label><input id="i8" type="date" value="${ymd(new Date())}"><label for="i5">유효기간</label><input id="i5" type="date"><label for="i6">입고 수량</label><input id="i6" type="number" min="1" inputmode="numeric">
  <label for="i7">메모 (선택)</label><input id="i7" placeholder="예: 납품처, 인수 확인자">
@@ -381,9 +437,9 @@ function doIn(){
  if(!dt)return msg('입고일을 입력하세요.');if(!exp)return msg('유효기간을 입력하세요.');
  if(!(q>0))return msg('수량은 1 이상이어야 합니다.');
  if(id==='_new'){const n=$('#i2').value.trim();if(!n)return msg('새 품목명을 입력하세요.');
-  const it={id:uid(),name:n,unit:$('#i3').value.trim()||'개'};S.items.push(it);id=it.id}
+  const it={id:uid(),name:n,unit:$('#i3').value.trim()||'개'};if(CLOUD)it.createdBy=CID;S.items.push(it);id=it.id}
  let lot=S.lots.find(l=>l.itemId===id&&l.exp===exp&&l.inDate===dt);
- if(lot)lot.qty+=q;else{lot={id:uid(),itemId:id,qty:q,exp,inDate:dt,memo:$('#i7').value.trim()};S.lots.push(lot)}
+ if(lot){lot.rec=(lot.rec==null?lot.qty:lot.rec)+q;lot.qty+=q}else{lot={id:uid(),itemId:id,qty:q,rec:q,exp,inDate:dt,memo:$('#i7').value.trim()};S.lots.push(lot)}
  S.logs.push({id:uid(),ts:now(),type:'in',itemId:id,lotId:lot.id,exp,d:q,date:dt,note:$('#i7').value.trim(),user:u,synced:false,voided:false});
  if(pendKey){S.codes=S.codes||{};S.codes[pendKey]=id;pendKey=''}if(pendImg){const it2=S.items.find(x=>x.id===id);if(it2)it2.img=pendImg;pendImg=''}save();msg('입고 저장 완료');go('stock');
 }
@@ -461,10 +517,43 @@ function cp(){const t=$('#tx');t.select();let ok=false;try{ok=document.execComma
 function markAll(){if(!confirm('조회 기간의 모든 기록을 입력 완료로 표시할까요?'))return;rows().forEach(g=>g.synced=true);S.lastSync=ymd(new Date());save();render()}
 function render(){
  $('#n').innerHTML=TABS.map(t=>`<button class="${t[0]===tab||(tab==='out'&&t[0]==='stock')?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
- $('#v').innerHTML={stock,in:inView,out:outView,hist,exp:expView}[tab]();
+ csBox();$('#v').innerHTML=(CLOUD&&!['items','allocs','lots','logs'].every(Cloud.isReady))?'<div class="card mu">서버에서 데이터를 불러오는 중…</div>':{stock,in:inView,out:outView,hist,exp:expView}[tab]();
  if(tab==='out')outLots();$('#u').value=S.user||'';window.scrollTo(0,0);
 }
 $('#u').addEventListener('change',e=>{S.user=e.target.value.trim();save()});
+const sched=()=>{clearTimeout(rtm);rtm=setTimeout(()=>{const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName||'')&&a.id!=='u')return;render()},150)};
+const lg=m=>{const e=$('#lg');if(e)e.style.display=m===false?'none':'flex';if(typeof m==='string'&&$('#lm'))$('#lm').textContent=m};
+function rebuild(){
+ const mine=new Set(S.allocs.map(a=>a.itemId).concat(S.lots.map(l=>l.itemId))),old=new Map(S.items.map(i=>[i.id,i]));
+ const out=RI.filter(i=>mine.has(i.id)||i.createdBy===CID).map(r=>{const o=old.get(r.id)||{};return Object.assign({},o,r,{unit:r.unit||o.unit||'개'})});
+ const have=new Set(out.map(i=>i.id));S.items.forEach(i=>{if(i.createdBy===CID&&!have.has(i.id))out.push(i)});
+ S.items=out;persist();sched()}
+function startCloud(){
+ CLOUD=true;
+ if(S.cid!==CID){try{if((S.lots||[]).length||(S.logs||[]).length)localStorage.setItem(K+'_backup_'+Date.now(),JSON.stringify(S))}catch(e){}
+  S={items:[],lots:[],logs:[],allocs:[],user:S.user||'',lastSync:'',codes:S.codes||{},cid:CID}}
+ S.allocs=S.allocs||[];
+ const eqC=c=>c.where('centerId','==',CID);
+ Cloud.watch('items',{map:IT_MAP,cb:a=>{RI=a;rebuild()}});
+ Cloud.watch('allocs',{q:eqC,cb:a=>{S.allocs=a;rebuild()}});
+ Cloud.watch('lots',{q:eqC,norm:x=>{x.inDate=x.date||x.inDate||'';if(x.rec==null)x.rec=x.qty;return x},map:o=>Object.assign({},o,{date:o.inDate,centerId:CID}),cb:a=>{S.lots=a;rebuild()}});
+ Cloud.watch('logs',{q:eqC,map:o=>Object.assign({},o,{centerId:CID}),cb:a=>{S.logs=a;persist();sched()}});
+ Cloud.watchDoc('centers',CID,d=>{CNAME=d?d.name:'';sched()});
+ Cloud.onErr=()=>sched();
+ lg(false);render()}
+async function afterAuth(u){
+ if(!u){CLOUD=false;lg('');return}
+ let m=null;try{m=await Cloud.member()}catch(e){}
+ if(!m){await Cloud.logout();return lg('이 계정은 등록되어 있지 않습니다. 관리자에게 센터 계정 연결을 요청하세요.')}
+ if(m.role!=='center'||!m.centerId){await Cloud.logout();return lg('관리자 계정은 PC 관리자 프로그램에서 사용하세요.')}
+ CID=m.centerId;startCloud()}
+function doLogin(){const e=$('#le').value.trim(),p=$('#lp').value;if(!e||!p)return lg('이메일과 비밀번호를 입력하세요.');lg('로그인 중…');Cloud.login(e,p).catch(x=>lg(loginErr(x)))}
+function doLogout(){if(confirm('로그아웃할까요?'))Cloud.logout().then(()=>location.reload())}
+function useLocal(){try{localStorage.setItem(MK,'local')}catch(e){}location.reload()}
+function goLogin(){try{localStorage.removeItem(MK)}catch(e){}location.reload()}
+function csBox(){const e=$('#cs');if(!e)return;
+ e.innerHTML=CLOUD?`☁ ${esc(CNAME||'센터')} · ${esc(Cloud.email())} <button class="btn s" style="padding:2px 10px;min-height:28px" onclick="doLogout()">로그아웃</button>${Cloud.err?'<div style="color:var(--er)">'+esc(Cloud.err)+'</div>':''}`
+ :`로컬 모드 (이 기기에만 저장) <button class="btn s" style="padding:2px 10px;min-height:28px" onclick="goLogin()">서버 로그인</button>`}
 render();
-if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(function(){});
+if(MODE!=='local'){lg('');if(!Cloud.init('phone'))lg('서버 연결 도구를 불러오지 못했습니다. 인터넷 연결을 확인하거나 로컬 모드를 사용하세요.');else Cloud.onAuth(afterAuth)}
 </script></body></html>
