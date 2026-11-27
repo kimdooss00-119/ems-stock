@@ -66,7 +66,7 @@ const dleft=e=>Math.round((new Date(e+'T00:00:00')-new Date(ymd(new Date())+'T00
 const norm=s=>String(s||'').replace(/\s+/g,'').toLowerCase();
 const ck=s=>norm(s).replace(/119|안전센터|지역대|센터/g,'');
 const MK='emsModeAdmin',MODE=(()=>{try{return localStorage.getItem(MK)||''}catch(e){return ''}})();
-let S=null,CLOUD=false,LG=[],rtm=0;
+let S=null,CLOUD=false,LG=[],MEM={},rtm=0;
 if(MODE==='local'){try{S=JSON.parse(localStorage.getItem(K))}catch(e){}}
 if(!S||!S.items)S={centers:[],items:[],batches:[],allocs:[],lots:[]};
 const CN=['centers','items','batches','allocs','lots'];
@@ -106,6 +106,7 @@ const Cloud=(()=>{
     prev[name]=m;ready[name]=true;o.cb(arr)
    },e=>api.fail('읽기 실패('+name+'): '+e.message)))},
   watchDoc(name,id,cb){unsubs.push(api.col(name).doc(id).onSnapshot(d=>cb(d.exists?d.data():null),e=>api.fail('읽기 실패('+name+'): '+e.message)))},
+  watchMembers(cb){unsubs.push(db.collection('members').where('org','==',ORG).onSnapshot(s=>{const m={};s.forEach(d=>{m[d.id]=d.data()});cb(m)},e=>api.fail('읽기 실패(members): '+e.message)))},
   isReady:n=>!!ready[n],
   push(name,arr,o){
    o=o||{};if(!ready[name])return false;
@@ -130,6 +131,7 @@ function startCloud(){
  const lotN=x=>{x.date=x.date||x.inDate||'';if(x.rec==null)x.rec=x.qty;return x};
  CN.forEach(n=>Cloud.watch(n,{norm:n==='lots'?lotN:null,cb:a=>{S[n]=a;sched()}}));
  Cloud.watch('logs',{q:c=>c.orderBy('ts','desc').limit(300),cb:a=>{LG=a;sched()}});
+ Cloud.watchMembers(m=>{MEM=m;sched()});
  Cloud.onErr=m=>{sched()};
  lg(false);render()}
 async function afterAuth(u){
@@ -415,9 +417,17 @@ function centers(){
    const i=S.items.find(x=>x.id===id)||{name:'?',spec:''},t=stat(id,det.id),bs=[...new Set(S.allocs.filter(a=>a.centerId===det.id&&a.itemId===id).map(a=>(S.batches.find(b=>b.id===a.batch)||{}).label||''))];
    return `<tr><td><b>${esc(i.name)}</b></td><td>${esc(i.spec)}</td><td>${esc(i.cat||'')}</td><td class="c">${t.a}</td><td class="c">${t.r}</td><td class="c">${t.s}</td><td>${esc(bs.join(', '))}</td></tr>`}).join('')||'<tr><td colspan="7" class="mu">배정된 품목이 없습니다.</td></tr>'}</table></div>`:'';
  return `<h2>안전센터 관리</h2><div class="row"><input id="nc" placeholder="새 센터 이름"><button class="btn" onclick="addC()">추가</button></div>
- <div class="wrap"><table><tr><th>센터</th><th>로그인 계정(이메일)</th><th class="c">배정 품목 수</th><th class="c">배정 수량 합</th><th class="c">재고 로트</th><th></th></tr>${S.centers.map(c=>`<tr><td><b>${esc(c.name)}</b></td><td style="white-space:nowrap"><input id="ce_${c.id}" value="${esc(c.email||'')}" placeholder="center1@test.com" style="width:190px"> <button class="btn s" onclick="setEmail('${c.id}')">연결</button></td><td class="c">${items(c.id).length}</td><td class="c">${S.allocs.filter(a=>a.centerId===c.id).reduce((s,a)=>s+a.qty,0)}</td><td class="c">${S.lots.filter(l=>l.centerId===c.id&&l.qty>0).length}</td><td><button class="btn s" onclick="cc=cc==='${c.id}'?'':'${c.id}';render()">${cc===c.id?'닫기':'품목 보기'}</button> <button class="btn s" onclick="renC('${c.id}')">이름 변경</button> <button class="btn s" onclick="delC('${c.id}')">삭제</button></td></tr>`).join('')||'<tr><td colspan="6" class="mu">센터가 없습니다.</td></tr>'}</table></div>
+ <div class="wrap"><table><tr><th>센터</th><th>로그인 계정(이메일)</th><th class="c">배정 품목 수</th><th class="c">배정 수량 합</th><th class="c">재고 로트</th><th></th></tr>${S.centers.map(c=>`<tr><td><b>${esc(c.name)}</b></td><td style="white-space:nowrap"><input id="ce_${c.id}" value="${esc(c.email||'')}" placeholder="center1@test.com" style="width:190px"> <button class="btn s" onclick="setEmail('${c.id}')">연결</button> ${linkTag(c)}</td><td class="c">${items(c.id).length}</td><td class="c">${S.allocs.filter(a=>a.centerId===c.id).reduce((s,a)=>s+a.qty,0)}</td><td class="c">${S.lots.filter(l=>l.centerId===c.id&&l.qty>0).length}</td><td><button class="btn s" onclick="cc=cc==='${c.id}'?'':'${c.id}';render()">${cc===c.id?'닫기':'품목 보기'}</button> <button class="btn s" onclick="renC('${c.id}')">이름 변경</button> <button class="btn s" onclick="delC('${c.id}')">삭제</button></td></tr>`).join('')||'<tr><td colspan="6" class="mu">센터가 없습니다.</td></tr>'}</table></div>
  ${detail}
  <p class="mu">엑셀의 부서명과 센터 이름을 맞춰 주는 기준이 됩니다. “품목 보기”를 누르면 그 센터에 배정된 품명과 규격이 보입니다. 센터 로그인 계정은 Firebase 콘솔에서 만든 이메일을 여기서 센터와 연결합니다.</p>`}
+function linkTag(c){
+ if(!CLOUD)return '<span class="tag" style="background:var(--bg);color:var(--mu)">로컬 모드</span>';
+ const e=(c.email||'').toLowerCase();
+ if(!e)return '<span class="tag" style="background:var(--bg);color:var(--mu)">○ 미연결</span>';
+ const m=MEM[e];
+ if(m&&m.role==='center'&&m.centerId===c.id)return '<span class="tag t-ok">● 연결됨</span>';
+ if(m)return '<span class="tag t-er">⚠ 다른 센터에 연결됨</span>';
+ return '<span class="tag t-wn">확인 중…</span>'}
 function setEmail(id){
  const c=S.centers.find(x=>x.id===id),v=($('#ce_'+id).value||'').trim().toLowerCase();
  if(v&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))return alert('이메일 형식이 아닙니다.');
