@@ -228,7 +228,7 @@ function evHtml(id){
   const l=lots.find(x=>x.id===g.lotId),d=g.exp?dleft(g.exp):null,first=g.type==='in'&&!g.voided&&l&&lastIn[g.lotId]===g.id;
   const left=!g.exp?'-':d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">'+d+'일</span>':d+'일';
   const act=first?(l.exp?`<button class="btn s" onclick="editLot('${l.id}')">수정</button>`:`<button class="btn" onclick="editLot('${l.id}')">유효기간 입력</button>`):'';
-  return `<tr class="${g.voided?'void':''}"><td>${dateOf(g)||'-'}</td><td><span class="tag ${g.type==='in'?'t-ok':g.type==='out'?'t-wn':'t-er'}">${EV[g.type]||esc(g.type)}</span>${g.voided?'<div class="mu">삭제됨</div>':''}</td><td>${g.exp?esc(g.exp):'<span class="tag t-wn">미입력</span>'}</td><td>${left}</td><td>${esc(g.user)}</td><td>${esc(g.note||'')}</td><td class="num"><b>${g.d>0?'+':''}${g.d}</b>${first?`<div class="mu">재고 ${l.qty}</div>`:''}</td><td>${act}</td></tr>`};
+  return `<tr class="${g.voided?'void':''}"><td>${dateOf(g)||'-'}</td><td><span class="tag ${g.type==='in'?'t-ok':g.type==='out'?'t-wn':'t-er'}">${EV[g.type]||esc(g.type)}</span>${g.voided?'<div class="mu">삭제됨</div>':''}</td><td>${g.exp?esc(g.exp):'<span class="tag t-wn">미입력</span>'}</td><td>${left}</td><td>${esc(g.user)}</td><td>${esc(g.note||'')}</td><td class="num"><b>${g.d>0?'+':''}${g.d}</b></td><td>${act}</td></tr>`};
  return `<div class="wrap"><table><tr><th>일자</th><th>구분</th><th>유효기간</th><th>남은일자</th><th>담당</th><th>사유</th><th class="num">수량</th><th></th></tr>${all.map(row).join('')}</table></div>${L.length>M?`<div class="mu">오래된 기록은 일부 생략되었습니다(최근 ${M}건만 표시). 전체는 이력 탭에서 확인하세요.</div>`:''}`}
 function itemCard(it){
   const ls=lotsOf(it.id),t=ls.reduce((s,l)=>s+l.qty,0);
