@@ -220,16 +220,16 @@ function evHtml(id){
  // 입고 기록이 없는 재고(관리자가 배정해 자동 입고된 수량 등)도 입고 줄로 함께 보여 줌
  const virt=lots.filter(l=>l.qty>0&&!S.logs.some(g=>g.lotId===l.id&&g.type==='in'&&!g.voided)).map(l=>({id:'v'+l.id,virt:1,type:'in',itemId:id,lotId:l.id,exp:l.exp||'',d:l.rec==null?l.qty:l.rec,date:l.inDate||'',ts:(l.inDate||'')+' 00:00',user:l.auto?'자동 입고':'-',note:l.auto?'배정 입고':'',voided:false}));
  const key=g=>dateOf(g)+' '+String(g.ts||'').slice(11);
- const cmp=(a,b)=>key(a)<key(b)?1:key(a)>key(b)?-1:0;
- const L=S.logs.filter(g=>g.itemId===id).sort(cmp),all=virt.sort(cmp).concat(L.slice(0,M)).sort(cmp);
+ const desc=(a,b)=>key(a)<key(b)?1:key(a)>key(b)?-1:0,asc=(a,b)=>desc(b,a);
+ const L=S.logs.filter(g=>g.itemId===id).sort(desc),all=virt.concat(L.slice(0,M)).sort(asc);
  if(!all.length)return '<div class="mu" style="margin-top:12px">입고·출고 내역이 아직 없습니다. 아래 버튼으로 입고하세요.</div>';
- const seen=new Set();
+ const lastIn={};all.forEach(g=>{if(g.type==='in'&&!g.voided)lastIn[g.lotId]=g.id});
  const row=g=>{
-  const l=lots.find(x=>x.id===g.lotId),d=g.exp?dleft(g.exp):null,first=g.type==='in'&&!g.voided&&l&&!seen.has(l.id);if(first)seen.add(l.id);
+  const l=lots.find(x=>x.id===g.lotId),d=g.exp?dleft(g.exp):null,first=g.type==='in'&&!g.voided&&l&&lastIn[g.lotId]===g.id;
   const left=!g.exp?'-':d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">D-'+d+'</span>':'D-'+d;
   const act=first?(l.exp?`<button class="btn s" onclick="editLot('${l.id}')">수정</button>`:`<button class="btn" onclick="editLot('${l.id}')">유효기간 입력</button>`):'';
-  return `<tr class="${g.voided?'void':''}"><td>${dateOf(g)||'-'}${g.virt?'':`<div class="mu">${esc(String(g.ts||'').slice(11))}</div>`}</td><td><span class="tag ${g.type==='in'?'t-ok':g.type==='out'?'t-wn':'t-er'}">${EV[g.type]||esc(g.type)}</span>${g.voided?'<div class="mu">삭제됨</div>':''}</td><td>${g.exp?esc(g.exp):'<span class="tag t-wn">미입력</span>'}</td><td>${left}</td><td>${esc(g.user)}</td><td>${esc(g.note||'')}</td><td class="num"><b>${g.d>0?'+':''}${g.d}</b>${first?`<div class="mu">재고 ${l.qty}</div>`:''}</td><td>${act}</td></tr>`};
- return `<div class="wrap"><table><tr><th>일자</th><th>구분</th><th>유효기간</th><th>남은 일</th><th>담당</th><th>사유</th><th class="num">수량</th><th></th></tr>${all.map(row).join('')}</table></div>${L.length>M?`<div class="mu">최근 ${M}건만 보여 줍니다. 전체는 이력 탭에서 확인하세요.</div>`:''}`}
+  return `<tr class="${g.voided?'void':''}"><td>${dateOf(g)||'-'}</td><td><span class="tag ${g.type==='in'?'t-ok':g.type==='out'?'t-wn':'t-er'}">${EV[g.type]||esc(g.type)}</span>${g.voided?'<div class="mu">삭제됨</div>':''}</td><td>${g.exp?esc(g.exp):'<span class="tag t-wn">미입력</span>'}</td><td>${left}</td><td>${esc(g.user)}</td><td>${esc(g.note||'')}</td><td class="num"><b>${g.d>0?'+':''}${g.d}</b>${first?`<div class="mu">재고 ${l.qty}</div>`:''}</td><td>${act}</td></tr>`};
+ return `<div class="wrap"><table><tr><th>일자</th><th>구분</th><th>유효기간</th><th>남은 일</th><th>담당</th><th>사유</th><th class="num">수량</th><th></th></tr>${all.map(row).join('')}</table></div>${L.length>M?`<div class="mu">오래된 기록은 일부 생략되었습니다(최근 ${M}건만 표시). 전체는 이력 탭에서 확인하세요.</div>`:''}`}
 function itemCard(it){
   const ls=lotsOf(it.id),t=ls.reduce((s,l)=>s+l.qty,0);
   const ex=ls.filter(l=>dleft(l.exp)<0),sn=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN);
