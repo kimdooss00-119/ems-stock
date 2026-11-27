@@ -192,22 +192,47 @@ function saveLot(){
  S.logs.push({id:uid(),ts:now(),type:'fix',itemId:l.itemId,lotId:l.id,exp:ex,d:dq,date:ymd(new Date()),note:'수정: '+ch.join(', '),user:u,synced:false,voided:false});
  save();ed=null;msg('수정 저장 완료');render();
 }
+let sq='',sc='',openSet=new Set();
+const CHO='ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+const cho=s=>[...String(s||'')].map(c=>{const n=c.charCodeAt(0)-44032;return n>=0&&n<11172?CHO[Math.floor(n/588)]:c}).join('');
+const nrm=s=>String(s||'').replace(/\s+/g,'').toLowerCase();
+function matchQ(it,q){const k=nrm(q);if(!k)return true;const t=nrm(it.name+it.spec);return t.includes(k)||(/[ㄱ-ㅎ]/.test(k)&&cho(t).includes(cho(k)))}
+const hasPN=it=>S.lots.some(l=>l.itemId===it.id&&l.qty>0&&!l.exp);
+function tg(id,o){if(o)openSet.add(id);else openSet.delete(id)}
+function itemCard(it){
+  const ls=lotsOf(it.id),t=ls.reduce((s,l)=>s+l.qty,0);
+  const ex=ls.filter(l=>dleft(l.exp)<0),sn=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN);
+  const ok=t-ex.reduce((s,l)=>s+l.qty,0),pn=ls.filter(l=>!l.exp);
+  return `<details class="card" ${openSet.has(it.id)?'open':''} ontoggle="tg('${it.id}',this.open)"><summary><div style="display:flex;gap:10px;align-items:center"><div style="flex:none">${thumb(it)}</div><div style="flex:1;min-width:0"><div class="row"><b>${dn(it)}</b><span><b class="num">${t}</b> ${esc(it.unit)}</span></div>
+  ${(()=>{const A=(S.allocs||[]).filter(a=>a.itemId===it.id).reduce((s,a)=>s+a.qty,0);if(!A)return '';const R=S.lots.filter(l=>l.itemId===it.id).reduce((s,l)=>s+(l.rec==null?l.qty:l.rec),0);return `<div style="margin:2px 0"><span class="tag t-ok">배정 ${A}</span> <span class="tag ${R>=A?'t-ok':'t-wn'}">입고 ${R}</span> <span class="mu">${R>=A?'배정 수량 입고 완료':'입고 예정 '+(A-R)}</span></div>`})()}<div class="mu">사용 가능 ${ok} · 최근 출고일 ${lastOut(it.id)}
+  ${ex.length?'<span class="tag t-er">만료 '+ex.length+'건</span>':''}${sn.length?'<span class="tag t-wn">임박 '+sn.length+'건</span>':''}${pn.length?'<span class="tag t-wn">유효기간 미입력 '+pn.length+'건</span>':''}</div></div><button class="btn s" style="flex:none;min-height:40px;padding:4px 10px;font-size:18px;line-height:1" aria-label="즐겨찾기" onclick="event.preventDefault();event.stopPropagation();fav('${it.id}')">${(S.fav||{})[it.id]?'★':'☆'}</button></div></summary>
+  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn s" onclick="goIn('${it.id}')">+ 입고</button><button class="btn s" ${t>0?'':'disabled'} onclick="goOut('${it.id}')">− 출고</button></div>
+  <div class="wrap"><table><tr><th>입고일</th><th>입고 담당</th><th>유효기간</th><th>남은 일</th><th class="num">수량</th><th></th></tr>${ls.map(l=>{const d=dleft(l.exp);return `<tr><td>${l.inDate||'-'}${memoOf(l)?'<div class="mu">'+esc(memoOf(l))+'</div>':''}</td><td>${esc(inUser(l))}</td><td>${l.exp||'<span class="tag t-wn">미입력</span>'}</td><td>${!l.exp?'-':d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">D-'+d+'</span>':'D-'+d}</td><td class="num">${l.qty}</td><td><button class="btn${l.exp?' s':''}" onclick="editLot('${l.id}')">${l.exp?'수정':'유효기간 입력'}</button></td></tr>`}).join('')||'<tr><td colspan="6" class="mu">재고 없음</td></tr>'}</table></div></details>`}
+const chipList=()=>{const cats=[...new Set(S.items.map(i=>i.cat).filter(Boolean))],nf=S.items.filter(i=>(S.fav||{})[i.id]).length,np=S.items.filter(hasPN).length;
+ return [['','전체 '+S.items.length],['__fav','★ 즐겨찾기 '+nf]].concat(cats.map(c=>[c,c+' '+S.items.filter(i=>i.cat===c).length]),np?[['__pn','유효기간 미입력 '+np]]:[])};
+function chipsHtml(){return chipList().map((c,k)=>`<button class="btn s" style="flex:none;min-height:36px;padding:4px 12px${sc===c[0]?';border-color:var(--ac);color:var(--ac);font-weight:700':''}" onclick="setSc(${k})">${esc(c[1])}</button>`).join('')}
+function visItems(){
+ let L=S.items.filter(i=>matchQ(i,sq));
+ if(sc==='__fav')L=L.filter(i=>(S.fav||{})[i.id]);else if(sc==='__pn')L=L.filter(hasPN);else if(sc)L=L.filter(i=>i.cat===sc);
+ const f=i=>(S.fav||{})[i.id]?0:1;return L.map((x,k)=>[x,k]).sort((a,b)=>f(a[0])-f(b[0])||a[1]-b[1]).map(x=>x[0])}
+function listHtml(){
+ const L=visItems();
+ if(!S.items.length)return '<div class="card mu">등록된 품목이 없습니다. 아래 입고 탭에서 새 품목을 등록하고 입고하세요.</div>';
+ if(!L.length)return `<div class="card mu">검색 결과가 없습니다.${sq||sc?' <button class="btn s" onclick="sq=\'\';sc=\'\';render()">검색 조건 지우기</button>':''}</div>`;
+ const fv=L.filter(i=>(S.fav||{})[i.id]).length;
+ return `<div class="mu" style="margin:4px 0">${L.length}개 품목${fv&&!sc?' · ★ 즐겨찾기가 맨 위에 있습니다':''}</div>`+L.map(itemCard).join('')}
+function drawList(){const e=$('#sl');if(e)e.innerHTML=listHtml();const c=$('#chips');if(c)c.innerHTML=chipsHtml()}
+function setSc(k){sc=chipList()[k][0];render()}
+function fav(id){S.fav=S.fav||{};if(S.fav[id])delete S.fav[id];else S.fav[id]=1;persist();drawList()}
 function stock(){
  if(ed)return editView();
- let tq=0,soon=0,exp=0,low=0,PN=0;
- const rows=S.items.map(it=>{
-  const ls=lotsOf(it.id),t=ls.reduce((s,l)=>s+l.qty,0);tq+=t;
-  const ex=ls.filter(l=>dleft(l.exp)<0),sn=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN);
-  const ok=t-ex.reduce((s,l)=>s+l.qty,0);
-  exp+=ex.length;soon+=sn.length;const pn=ls.filter(l=>!l.exp);PN+=pn.length;
-  return `<details class="card"><summary><div style="display:flex;gap:10px;align-items:center"><div style="flex:none">${thumb(it)}</div><div style="flex:1;min-width:0"><div class="row"><b>${dn(it)}</b><span><b class="num">${t}</b> ${esc(it.unit)}</span></div>
-  ${(()=>{const A=(S.allocs||[]).filter(a=>a.itemId===it.id).reduce((s,a)=>s+a.qty,0);if(!A)return '';const R=S.lots.filter(l=>l.itemId===it.id).reduce((s,l)=>s+(l.rec==null?l.qty:l.rec),0);return `<div style="margin:2px 0"><span class="tag t-ok">배정 ${A}</span> <span class="tag ${R>=A?'t-ok':'t-wn'}">입고 ${R}</span> <span class="mu">${R>=A?'배정 수량 입고 완료':'입고 예정 '+(A-R)}</span></div>`})()}<div class="mu">사용 가능 ${ok} · 최근 출고일 ${lastOut(it.id)}
-  ${ex.length?'<span class="tag t-er">만료 '+ex.length+'건</span>':''}${sn.length?'<span class="tag t-wn">임박 '+sn.length+'건</span>':''}${pn.length?'<span class="tag t-wn">유효기간 미입력 '+pn.length+'건</span>':''}</div></div></div></summary>
-  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn s" onclick="goIn('${it.id}')">+ 입고</button><button class="btn s" ${t>0?'':'disabled'} onclick="goOut('${it.id}')">− 출고</button></div>
-  <div class="wrap"><table><tr><th>입고일</th><th>입고 담당</th><th>유효기간</th><th>남은 일</th><th class="num">수량</th><th></th></tr>${ls.map(l=>{const d=dleft(l.exp);return `<tr><td>${l.inDate||'-'}${memoOf(l)?'<div class="mu">'+esc(memoOf(l))+'</div>':''}</td><td>${esc(inUser(l))}</td><td>${l.exp||'<span class="tag t-wn">미입력</span>'}</td><td>${!l.exp?'-':d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">D-'+d+'</span>':'D-'+d}</td><td class="num">${l.qty}</td><td><button class="btn${l.exp?' s':''}" onclick="editLot('${l.id}')">${l.exp?'수정':'유효기간 입력'}</button></td></tr>`}).join('')||'<tr><td colspan="6" class="mu">재고 없음</td></tr>'}</table></div></details>`}).join('');
+ let tq=0,soon=0,exp=0,PN=0;
+ S.items.forEach(it=>{const ls=lotsOf(it.id);tq+=ls.reduce((s,l)=>s+l.qty,0);exp+=ls.filter(l=>dleft(l.exp)<0).length;soon+=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN).length;PN+=ls.filter(l=>!l.exp).length});
  const AT=(S.allocs||[]).reduce((s,a)=>s+a.qty,0);
- return `<div class="sum">${PN?`<div class="warn"><b>${PN}</b><span>유효기간 입력 필요</span></div>`:''}<div><b>${S.items.length}</b><span>관리 품목</span></div>${AT?`<div><b>${AT}</b><span>배정 수량 합계</span></div>`:''}<div><b>${tq}</b><span>총 재고 수량</span></div><div class="${soon?'warn':''}"><b>${soon}</b><span>${WARN}일 내 임박</span></div><div class="${exp?'bad':''}"><b>${exp}</b><span>만료 (폐기 대상)</span></div></div>${rows||'<div class="card mu">등록된 품목이 없습니다. 아래 입고 탭에서 새 품목을 등록하고 입고하세요.</div>'}
- <p class="mu">같은 품목도 입고일·유효기간이 다르면 따로 관리하며, 출고할 때 어느 입고분에서 뺄지 직접 선택합니다.</p>
+ return `<div class="sum">${PN?`<div class="warn"><b>${PN}</b><span>유효기간 입력 필요</span></div>`:''}<div><b>${S.items.length}</b><span>관리 품목</span></div>${AT?`<div><b>${AT}</b><span>배정 수량 합계</span></div>`:''}<div><b>${tq}</b><span>총 재고 수량</span></div><div class="${soon?'warn':''}"><b>${soon}</b><span>${WARN}일 내 임박</span></div><div class="${exp?'bad':''}"><b>${exp}</b><span>만료 (폐기 대상)</span></div></div>
+ <div id="ctl" style="position:sticky;top:calc(var(--hh,56px) + env(safe-area-inset-top,0px));background:var(--bg);padding:8px 0;z-index:4"><input id="sq" type="search" placeholder="품목 검색 (예: 거즈, 장갑, ㄱㅈ)" autocomplete="off" value="${esc(sq)}" oninput="sq=this.value;drawList()" style="width:100%"><div id="chips" style="display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px">${chipsHtml()}</div></div>
+ <div id="sl">${listHtml()}</div>
+ <p class="mu">같은 품목도 입고일·유효기간이 다르면 따로 관리하며, 출고할 때 어느 입고분에서 뺄지 직접 선택합니다. ☆를 누르면 즐겨찾기로 맨 위에 모입니다. (즐겨찾기는 이 휴대폰에만 저장됩니다)</p>
  ${CLOUD?'':'<button class="btn s" onclick="if(confirm(\'모든 품목과 기록을 삭제할까요? 되돌릴 수 없습니다.\')){S=seed();save();render()}">전체 데이터 삭제</button>'}`;
 }
 let ph=null,phCv=null,pendKey='',pendImg='',phMsg='',phAdd=false,phOnly='';
@@ -537,10 +562,10 @@ function markAll(){if(!confirm('조회 기간의 모든 기록을 입력 완료�
 function render(){
  $('#n').innerHTML=TABS.map(t=>`<button class="${t[0]===tab||(tab==='out'&&t[0]==='stock')?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
  csBox();$('#v').innerHTML=(CLOUD&&!['items','allocs','lots','logs'].every(Cloud.isReady))?'<div class="card mu">서버에서 데이터를 불러오는 중…</div>':{stock,in:inView,out:outView,hist,exp:expView}[tab]();
- if(tab==='out')outLots();$('#u').value=S.user||'';window.scrollTo(0,0);
+ if(tab==='out')outLots();$('#u').value=S.user||'';const hd=$('header');if(hd&&hd.offsetHeight&&document.documentElement.style)document.documentElement.style.setProperty('--hh',hd.offsetHeight+'px');window.scrollTo(0,0);
 }
 $('#u').addEventListener('change',e=>{S.user=e.target.value.trim();save()});
-const sched=()=>{clearTimeout(rtm);rtm=setTimeout(()=>{const a=document.activeElement;if((a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName||'')&&a.id!=='u')||ed||tab==='in'||(ph&&ph.busy))return;render()},150)};
+const sched=()=>{clearTimeout(rtm);rtm=setTimeout(()=>{const a=document.activeElement;if(a&&a.id==='sq'&&tab==='stock'&&!ed){drawList();return}if((a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName||'')&&a.id!=='u')||ed||tab==='in'||(ph&&ph.busy))return;render()},150)};
 const lg=m=>{const e=$('#lg');if(e)e.style.display=m===false?'none':'flex';if(typeof m==='string'&&$('#lm'))$('#lm').textContent=m};
 function rebuild(){
  const mine=new Set(S.allocs.map(a=>a.itemId).concat(S.lots.map(l=>l.itemId))),old=new Map(S.items.map(i=>[i.id,i]));
@@ -550,7 +575,7 @@ function rebuild(){
 function startCloud(){
  CLOUD=true;
  if(S.cid!==CID){try{if((S.lots||[]).length||(S.logs||[]).length)localStorage.setItem(K+'_backup_'+Date.now(),JSON.stringify(S))}catch(e){}
-  S={items:[],lots:[],logs:[],allocs:[],user:S.user||'',lastSync:'',codes:S.codes||{},cid:CID}}
+  S={items:[],lots:[],logs:[],allocs:[],user:S.user||'',lastSync:'',codes:S.codes||{},fav:S.fav||{},cid:CID}}
  S.allocs=S.allocs||[];
  const eqC=c=>c.where('centerId','==',CID);
  Cloud.watch('items',{map:IT_MAP,cb:a=>{RI=a;rebuild()}});
