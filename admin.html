@@ -24,7 +24,7 @@ input,select{padding:8px;border:1px solid var(--ln);border-radius:6px;background
 .btn{background:var(--ac);color:var(--acx);border:0;border-radius:6px;padding:8px 14px;font:inherit;font-weight:700;cursor:pointer;min-height:36px}
 .btn.s{background:var(--sf);color:var(--tx);border:1px solid var(--ln);font-weight:500}
 :focus-visible{outline:2px solid var(--ac);outline-offset:2px}
-.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
 .cards div,.box{background:var(--sf);border:1px solid var(--ln);border-radius:8px;padding:12px}
 .cards b{display:block;font-size:22px}.cards span,.mu{color:var(--mu);font-size:12px}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
@@ -155,7 +155,7 @@ let gUsed='';
 const nameOf=(a,id)=>(S[a].find(x=>x.id===id)||{name:'?'}).name;
 function stat(i,c){const a=S.allocs.filter(x=>x.itemId===i&&(!c||x.centerId===c)).reduce((s,x)=>s+x.qty,0),L=S.lots.filter(x=>x.itemId===i&&(!c||x.centerId===c));
  return {a,r:L.reduce((s,x)=>s+x.rec,0),s:L.reduce((s,x)=>s+x.qty,0)}}
-const alerts=()=>S.lots.filter(l=>l.qty>0&&dleft(l.exp)<=WARN).sort((a,b)=>a.exp<b.exp?-1:1);
+const alerts=()=>S.lots.filter(l=>l.exp&&l.qty>0&&dleft(l.exp)<=WARN).sort((a,b)=>a.exp<b.exp?-1:1);
 
 const vis=s=>[...String(s||'')].reduce((n,c)=>n+(c.charCodeAt(0)>127?2:1),0);
 const shortN=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n)+'…':s};
@@ -189,8 +189,8 @@ function renSheet(){
 function delFile(){
  const {f}=scope();if(!f)return;
  const n=S.allocs.filter(a=>f.ids.includes(a.batch)).length;
- if(!confirm('“'+f.name+'” 파일로 올린 배정 '+n+'건을 삭제합니다.\n수령·재고 기록은 지우지 않습니다. 되돌릴 수 없습니다.\n\n계속할까요?'))return;
- S.allocs=S.allocs.filter(a=>!f.ids.includes(a.batch));S.batches=S.batches.filter(b=>!f.ids.includes(b.id));
+ if(!confirm('“'+f.name+'” 파일로 올린 배정 '+n+'건을 삭제합니다.\n자동 입고된 수량 중 유효기간을 아직 입력하지 않은 것도 함께 지우고, 입력이 끝난 재고는 남깁니다. 되돌릴 수 없습니다.\n\n계속할까요?'))return;
+ const gone=new Set(S.allocs.filter(a=>f.ids.includes(a.batch)).map(a=>a.id));S.lots=S.lots.filter(l=>!(gone.has(l.allocId)&&untouched(l)));S.allocs=S.allocs.filter(a=>!f.ids.includes(a.batch));S.batches=S.batches.filter(b=>!f.ids.includes(b.id));
  const used=new Set(S.allocs.map(a=>a.itemId)),lo=new Set(S.lots.map(l=>l.itemId));S.items=S.items.filter(i=>used.has(i.id)||lo.has(i.id));
  vf='';vs='';save();note='“'+f.name+'” 배정을 삭제했습니다.';render();
 }
@@ -203,7 +203,7 @@ function dash(){
  let A=0,R=0;base.forEach(i=>{const t=sc(i.id,'',ids);A+=t.a;R+=t.r});
  const al=tot?S.lots.filter(l=>l.qty>0&&dleft(l.exp)<=WARN&&base.some(i=>i.id===l.itemId)):[],ex=al.filter(l=>dleft(l.exp)<0).length;
  const nC=tot?S.centers.length:new Set(S.allocs.filter(a=>ids.has(a.batch)).map(a=>a.centerId)).size;
- const cards=tot?`<div class="cards"><div><b>${nC}</b><span>안전센터</span></div><div><b>${base.length}</b><span>관리 품목</span></div><div><b>${A?Math.round(R/A*100):0}%</b><span>배정 대비 수령 (${R}/${A})</span></div><div><b>${al.length-ex}</b><span>${WARN}일 내 임박</span></div><div><b style="color:var(--er)">${ex}</b><span>만료 재고</span></div></div>`
+ const cards=tot?`<div class="cards"><div><b>${nC}</b><span>안전센터</span></div><div><b>${base.length}</b><span>관리 품목</span></div><div><b>${A?Math.round(R/A*100):0}%</b><span>배정 대비 수령 (${R}/${A})</span></div><div><b>${al.length-ex}</b><span>${WARN}일 내 임박</span></div><div><b style="color:var(--er)">${ex}</b><span>만료 재고</span></div><div><b>${S.lots.filter(l=>!l.exp&&l.qty>0&&base.some(i=>i.id===l.itemId)).length}</b><span>유효기간 미입력 재고</span></div></div>`
   :`<div class="cards"><div><b>${nC}</b><span>배정받은 센터</span></div><div><b>${base.length}</b><span>품목</span></div><div><b>${A}</b><span>배정 수량 합계</span></div></div>`;
  const fch=fl.length?`<div class="row" style="gap:6px"><span class="mu">파일</span><button class="btn s ${!f?'on':''}" onclick="setVF(-1)">총 합계</button>${fl.map((x,k)=>`<button class="btn s ${f&&f.key===x.key?'on':''}" onclick="setVF(${k})" title="${esc(x.date)}">${esc(x.name)}</button>`).join('')}</div>`:'';
  const sch=curCats.length>1?`<div class="row" style="gap:6px"><span class="mu">시트</span><button class="btn s ${!vs?'on':''}" onclick="setVS(-1)">전체 (${inScope.length})</button>${curCats.map((c,k)=>`<button class="btn s ${vs===c?'on':''}" onclick="setVS(${k})">${esc(catLabel(c))} (${inScope.filter(i=>(i.cat||'__none')===c).length})</button>`).join('')}${vs?'<button class="btn s" style="margin-left:auto" onclick="renSheet()">시트 이름 변경</button>':''}</div>`:'';
@@ -370,6 +370,9 @@ function parsed(){
   out.push({n,sp,d,sum,tot,warn:tot!==null&&!isNaN(tot)&&tot!==sum,ln:i+1})}
  return out;
 }
+// 배정이 등록되면 센터 재고에 자동 입고 (유효기간은 센터에서 입력)
+const autoLot=(a,date)=>({id:uid(),itemId:a.itemId,centerId:a.centerId,exp:'',rec:a.qty,qty:a.qty,date:date||ymd(new Date()),allocId:a.id,auto:true});
+const untouched=l=>l&&l.auto&&!l.exp&&l.qty===l.rec;
 function regSheet(label,cat,file,up){
  const P=parsed().filter(x=>!(U.excl&&x.warn));if(!P.length)return null;
  const cid={},H=hdr();
@@ -379,7 +382,7 @@ function regSheet(label,cat,file,up){
  let ni=0,ei=0,na=0;
  P.forEach(x=>{let it=S.items.find(i=>norm(i.name)===norm(x.n)&&norm(i.spec)===norm(x.sp)&&norm(i.cat)===norm(cat));
   if(it)ei++;else{it={id:uid(),name:x.n,spec:x.sp,cat:cat||''};S.items.push(it);ni++}
-  x.d.forEach(y=>{if(cid[y.c]&&y.q>0){S.allocs.push({id:uid(),batch:b.id,itemId:it.id,centerId:cid[y.c],qty:y.q});na++}})});
+  x.d.forEach(y=>{if(cid[y.c]&&y.q>0){const a={id:uid(),batch:b.id,itemId:it.id,centerId:cid[y.c],qty:y.q};S.allocs.push(a);S.lots.push(autoLot(a,b.date));na++}})});
  return {ni,ei,na};
 }
 function applyUp(){
@@ -451,9 +454,9 @@ function demo(){
  S.items=it.map(a=>({id:a.id,name:a.name,spec:a.spec,cat:a.cat}));
  const ups={'샘플 1차 배정':uid(),'샘플 2차 배정':uid()},bt={};
  const getB=(nm,cat)=>bt[nm+cat]||(bt[nm+cat]=(()=>{const b={id:uid(),label:nm+'_'+cat,date:ymd(new Date()),file:nm,up:ups[nm],sheet:cat};S.batches.push(b);return b})());
- it.forEach((a,k)=>cn.forEach((c,j)=>{S.allocs.push({id:uid(),batch:getB('샘플 1차 배정',a.cat).id,itemId:a.id,centerId:c.id,qty:a.q1[j]});
-  if(a.q2)S.allocs.push({id:uid(),batch:getB('샘플 2차 배정',a.cat).id,itemId:a.id,centerId:c.id,qty:a.q2[j]});
-  if((j+k)%3!==0){const r=Math.round(a.q1[j]*(j%2?1:.6)),ex=addD([-10,40,300,500][(j+k)%4]);S.lots.push({id:uid(),itemId:a.id,centerId:c.id,exp:ex,rec:r,qty:Math.max(0,r-Math.round(r*.15)),date:addD(-20)})}}));
+ it.forEach((a,k)=>cn.forEach((c,j)=>{const a1={id:uid(),batch:getB('샘플 1차 배정',a.cat).id,itemId:a.id,centerId:c.id,qty:a.q1[j]};S.allocs.push(a1);const l1=autoLot(a1,addD(-20));
+  if((j+k)%3!==0){l1.exp=addD([-10,40,300,500][(j+k)%4]);l1.qty=Math.max(0,l1.rec-Math.round(l1.rec*.15))}S.lots.push(l1);
+  if(a.q2){const a2={id:uid(),batch:getB('샘플 2차 배정',a.cat).id,itemId:a.id,centerId:c.id,qty:a.q2[j]};S.allocs.push(a2);S.lots.push(autoLot(a2,addD(-3)))}}));
  save();note='샘플 데이터를 넣었습니다.';render()}
 
 const PG={dash:['현황',dash],upload:['엑셀 업로드',upload],centers:['센터 관리',centers],alerts:['알림',alertsV],logs:['입출고 이력',logsV],sim:['시험 입력',sim],item:['품목 수정',itemV]};
@@ -494,15 +497,15 @@ function saveItem(){
 function saveAlloc(id){
  const a=S.allocs.find(x=>x.id===id),n=intV('#aq_'+id);if(!a)return;
  if(n===null)return alert('수량은 0 이상의 정수로 입력하세요.');
- a.qty=n;save();note='배정 수량을 저장했습니다.';render();
+ a.qty=n;const al=S.lots.find(l=>l.allocId===id);if(untouched(al)){al.qty=n;al.rec=n}save();note='배정 수량을 저장했습니다.';render();
 }
-function delAlloc(id){if(!confirm('이 배정을 삭제할까요?'))return;S.allocs=S.allocs.filter(a=>a.id!==id);save();note='배정을 삭제했습니다.';render()}
+function delAlloc(id){if(!confirm('이 배정을 삭제할까요?'))return;S.allocs=S.allocs.filter(a=>a.id!==id);S.lots=S.lots.filter(l=>!(l.allocId===id&&untouched(l)));save();note='배정을 삭제했습니다.';render()}
 function addAlloc(){
  const c=$('#nac').value,n=intV('#naq');
  if(!c)return alert('센터를 선택하세요.');
  if(n===null||n<1)return alert('수량은 1 이상의 정수로 입력하세요.');
  let b=S.batches.find(x=>x.label==='수동 추가');if(!b){b={id:uid(),label:'수동 추가',date:ymd(new Date())};S.batches.push(b)}
- S.allocs.push({id:uid(),batch:b.id,itemId:ei,centerId:c,qty:n});save();note='배정을 추가했습니다.';render();
+ const na={id:uid(),batch:b.id,itemId:ei,centerId:c,qty:n};S.allocs.push(na);S.lots.push(autoLot(na));save();note='배정을 추가했습니다.';render();
 }
 function saveLot(id){
  const l=S.lots.find(x=>x.id===id),r=intV('#lr_'+id),n=intV('#lq_'+id);if(!l)return;
