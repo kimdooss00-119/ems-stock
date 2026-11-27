@@ -166,7 +166,7 @@ const catLabel=c=>c==='__none'?'분류 없음':c;
 const fkey=b=>b.up||('l:'+(b.file||b.label));
 function files(){
  const used=new Set(S.allocs.map(a=>a.batch)),m=[],seen={};
- S.batches.forEach(b=>{if(!used.has(b.id))return;const k=fkey(b);if(!seen[k]){seen[k]={key:k,name:b.file||b.label,ids:[],date:b.date};m.push(seen[k])}seen[k].ids.push(b.id)});
+ S.batches.forEach(b=>{if(!used.has(b.id))return;const k=fkey(b);if(!seen[k]){seen[k]={key:k,name:b.file||b.label,ids:[],date:b.date,inDate:b.inDate||b.date};m.push(seen[k])}seen[k].ids.push(b.id)});
  const cn={},ix={};m.forEach(f=>cn[f.name]=(cn[f.name]||0)+1);
  m.forEach(f=>{if(cn[f.name]>1){ix[f.name]=(ix[f.name]||0)+1;f.name+=' ('+ix[f.name]+')'}});
  return m;
@@ -174,7 +174,10 @@ function files(){
 function scope(){const fl=files(),f=fl.find(x=>x.key===vf);if(vf&&!f)vf='';return {fl,f,ids:f?new Set(f.ids):null}}
 // 로트가 어느 파일(배정 묶음)에서 왔는지: 자동 입고 로트는 batch 또는 allocId로 연결
 let AB=new Map(),SPLIT=true;
-const buildAB=()=>{AB=new Map(S.allocs.map(a=>[a.id,a.batch]))};
+let BS=new Map();
+const buildAB=()=>{AB=new Map(S.allocs.map(a=>[a.id,a.batch]));BS=new Map(S.batches.map(b=>[b.id,b.sheet||'']))};
+const itemCats=(i,ids)=>{const s=new Set();S.allocs.forEach(a=>{if(a.itemId===i.id&&(!ids||ids.has(a.batch)))s.add(BS.get(a.batch)||i.cat||'')});if(!s.size&&!ids)s.add(i.cat||'');return [...s].map(c=>c||'__none')};
+const catTxt=(i,ids)=>itemCats(i,ids).filter(c=>c!=='__none').join(', ');
 const batchOf=l=>l.batch||AB.get(l.allocId)||'';
 function sc(i,c,ids){if(!ids)return stat(i,c);
  const a=S.allocs.filter(x=>x.itemId===i&&(!c||x.centerId===c)&&ids.has(x.batch)).reduce((s,x)=>s+x.qty,0),
@@ -200,8 +203,8 @@ function renFile(){
 }
 function renSheet(){
  if(!vs)return;const old=vs==='__none'?'':vs,v=prompt('시트(분류) 이름 변경'+(vs==='__none'?' — 분류가 없는 품목에 새 분류를 붙입니다':''),old);if(v===null)return;const nm=v.trim();if(!nm)return alert('이름을 입력하세요.');
- const {ids}=scope();let n=0;
- S.items.forEach(i=>{if((i.cat||'__none')!==vs)return;if(vs==='__none'&&ids&&!S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch)))return;i.cat=nm;n++});
+ buildAB();let n=S.items.filter(i=>itemCats(i,null).includes(vs)).length;
+ S.items.forEach(i=>{if((i.cat||'__none')===vs)i.cat=nm});
  S.batches.forEach(b=>{if((b.sheet||'')===old)b.sheet=nm});
  vs=nm;save();note='시트 이름을 “'+nm+'”(으)로 바꿨습니다. 품목 '+n+'개의 분류가 함께 바뀌었습니다.';render();
 }
@@ -230,17 +233,17 @@ function dash(){
  buildAB();
  const {fl,f,ids}=scope(),tot=!ids;
  const inScope=S.items.filter(i=>tot||S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch)));
- curCats=[...new Set(inScope.map(i=>i.cat||'__none'))];
+ curCats=[...new Set(inScope.flatMap(i=>itemCats(i,ids)))];
  if(vs&&!curCats.includes(vs))vs='';
- const base=inScope.filter(i=>!vs||(i.cat||'__none')===vs);
+ const base=inScope.filter(i=>!vs||itemCats(i,ids).includes(vs));
  let A=0,R=0;base.forEach(i=>{const t=sc(i.id,'',ids);A+=t.a;R+=t.r});
  const al=tot?S.lots.filter(l=>l.exp&&l.qty>0&&dleft(l.exp)<=WARN&&base.some(i=>i.id===l.itemId)):[],ex=al.filter(l=>dleft(l.exp)<0).length;
  const nC=tot?S.centers.length:new Set(S.allocs.filter(a=>ids.has(a.batch)).map(a=>a.centerId)).size;
  const cards=tot?`<div class="cards"><div><b>${nC}</b><span>안전센터</span></div><div><b>${base.length}</b><span>관리 품목</span></div><div><b>${A?Math.round(R/A*100):0}%</b><span>배정 대비 수령 (${R}/${A})</span></div><div><b>${al.length-ex}</b><span>${WARN}일 내 임박</span></div><div><b style="color:var(--er)">${ex}</b><span>만료 재고</span></div><div><b>${S.lots.filter(l=>!l.exp&&l.qty>0&&base.some(i=>i.id===l.itemId)).length}</b><span>유효기간 미입력 재고</span></div></div>`
   :`<div class="cards"><div><b>${nC}</b><span>배정받은 센터</span></div><div><b>${base.length}</b><span>품목</span></div><div><b>${A}</b><span>배정 수량 합계</span></div><div><b>${R}</b><span>입고 수량 합계</span></div></div>`;
  const fch=fl.length?`<div class="row" style="gap:6px"><span class="mu">파일</span><button class="btn s ${!f?'on':''}" onclick="setVF(-1)">총 합계</button>${fl.map((x,k)=>`<button class="btn s ${f&&f.key===x.key?'on':''}" onclick="setVF(${k})" title="${esc(x.date)}">${esc(x.name)}</button>`).join('')}</div>`:'';
- const sch=curCats.length>1?`<div class="row" style="gap:6px"><span class="mu">시트</span><button class="btn s ${!vs?'on':''}" onclick="setVS(-1)">전체 (${inScope.length})</button>${curCats.map((c,k)=>`<button class="btn s ${vs===c?'on':''}" onclick="setVS(${k})">${esc(catLabel(c))} (${inScope.filter(i=>(i.cat||'__none')===c).length})</button>`).join('')}${vs?'<button class="btn s" style="margin-left:auto" onclick="renSheet()">시트 이름 변경</button>':''}</div>`:'';
- const finfo=f?`<div class="box" style="margin-bottom:10px"><div class="row" style="margin:0"><b>${esc(f.name)}</b><span class="mu">업로드 ${esc(f.date)} · 이 파일로 배정·입고된 수량만 보여줍니다.</span><button class="btn s" style="margin-left:auto" onclick="renFile()">파일 이름 변경</button><button class="btn s" onclick="delFile()">이 파일 배정 삭제</button></div></div>`:'';
+ const sch=curCats.length>1?`<div class="row" style="gap:6px"><span class="mu">시트</span><button class="btn s ${!vs?'on':''}" onclick="setVS(-1)">전체 (${inScope.length})</button>${curCats.map((c,k)=>`<button class="btn s ${vs===c?'on':''}" onclick="setVS(${k})">${esc(catLabel(c))} (${inScope.filter(i=>itemCats(i,ids).includes(c)).length})</button>`).join('')}${vs?'<button class="btn s" style="margin-left:auto" onclick="renSheet()">시트 이름 변경</button>':''}</div>`:'';
+ const finfo=f?`<div class="box" style="margin-bottom:10px"><div class="row" style="margin:0"><b>${esc(f.name)}</b><span class="mu">업로드 ${esc(f.date)} · 입고일 ${esc(f.inDate)} · 이 파일로 배정·입고된 수량만 보여줍니다.</span><button class="btn s" style="margin-left:auto" onclick="renFile()">파일 이름 변경</button><button class="btn s" onclick="delFile()">이 파일 배정 삭제</button></div></div>`:'';
  return `${note?`<div class="msg">${esc(note)}</div>`:''}<h2>센터별 현황</h2>${fch}${sch}${finfo}${cards}
  <div class="row"><input id="sq" placeholder="품목·규격 검색" value="${esc(q)}" oninput="q=this.value;drawTb()"><select onchange="fc=this.value;render()"><option value="">모든 센터</option>${S.centers.map(c=>`<option value="${c.id}" ${fc===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
  ${tot&&fl.length?`<label style="display:flex;gap:6px;align-items:center;color:var(--tx)"><input type="checkbox" style="min-height:0" ${SPLIT?'checked':''} onchange="SPLIT=this.checked;render()">파일별로 나눠 보기</label>`:''}
@@ -254,13 +257,13 @@ function tbHtml(){
  buildAB();
  const {fl,f,ids}=scope(),tot=!ids;
  const inScope=S.items.filter(i=>tot||S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch)));
- const base=inScope.filter(i=>!vs||(i.cat||'__none')===vs),its=base.filter(i=>norm(i.name+i.spec).includes(norm(q))),cs=S.centers.filter(c=>!fc||c.id===fc),showCat=S.items.some(i=>i.cat);
+ const base=inScope.filter(i=>!vs||itemCats(i,ids).includes(vs)),its=base.filter(i=>norm(i.name+i.spec).includes(norm(q))),cs=S.centers.filter(c=>!fc||c.id===fc),showCat=S.batches.some(b=>b.sheet)||S.items.some(i=>i.cat);
  const rows=buildRows(its,fl,ids,tot,SPLIT,f),fcol=fl.length>0,nc=cs.length+1,cw=100,fw=fcol?120:0;
  const w1=Math.max(8,Math.ceil(Math.max(0,...S.items.map(i=>vis(i.name)))*.7)),w2=Math.max(5,Math.ceil(Math.max(0,...S.items.map(i=>vis(i.spec)))*.5));
  const fname=r=>r.f?esc(shortN(r.f.name,16)):r.un?'직접 입력':'전체 합산';
  const head=`<tr><th class="cn">품목</th><th class="cs">규격</th>${showCat?'<th>분류</th>':''}${fcol?'<th>파일</th>':''}${cs.map(c=>`<th class="c">${esc(c.name)}<br><span class="mu">재고/입고</span></th>`).join('')}<th class="c">전체<br><span class="mu">재고/입고</span></th><th></th></tr>`;
  const body=rows.map(r=>{const i=r.i;
-  return `<tr><td class="cn"><b>${esc(i.name)}</b></td><td class="cs">${esc(i.spec)}</td>${showCat?`<td>${esc(i.cat||'')}</td>`:''}${fcol?`<td class="fl" title="${esc(r.f?r.f.name:'')}">${fname(r)}</td>`:''}${cs.map(c=>cell(sc(i.id,c.id,r.ids))).join('')}${cell(sc(i.id,fc,r.ids))}<td style="white-space:nowrap"><button class="btn s" onclick="editItem('${i.id}')">수정</button> <button class="btn s" style="color:var(--er)" onclick="delRow('${i.id}',${r.k})">삭제</button></td></tr>`}).join('');
+  return `<tr><td class="cn"><b>${esc(i.name)}</b></td><td class="cs">${esc(i.spec)}</td>${showCat?`<td>${esc(catTxt(i,r.ids))}</td>`:''}${fcol?`<td class="fl" title="${esc(r.f?r.f.name:'')}">${fname(r)}</td>`:''}${cs.map(c=>cell(sc(i.id,c.id,r.ids))).join('')}${cell(sc(i.id,fc,r.ids))}<td style="white-space:nowrap"><button class="btn s" onclick="editItem('${i.id}')">수정</button> <button class="btn s" style="color:var(--er)" onclick="delRow('${i.id}',${r.k})">삭제</button></td></tr>`}).join('');
  const sum=c=>{const o={a:0,r:0,s:0};rows.forEach(r=>{const t=sc(r.i.id,c,r.ids);o.a+=t.a;o.r+=t.r;o.s+=t.s});return o};
  const foot=rows.length?`<tr style="font-weight:700;background:var(--bg)"><td class="cn">합계</td><td class="cs"></td>${showCat?'<td></td>':''}${fcol?'<td></td>':''}${cs.map(c=>cell(sum(c.id))).join('')}${cell(sum(fc))}<td></td></tr>`:'';
  return `<div class="wrap"><table style="table-layout:fixed;width:calc(${w1+w2}ch + ${nc*cw+(showCat?90:0)+fw+150}px)"><colgroup><col style="width:${w1}ch"><col style="width:${w2}ch">${showCat?'<col style="width:90px">':''}${fcol?'<col style="width:120px">':''}${('<col style="width:'+cw+'px">').repeat(nc)}<col style="width:150px"></colgroup>${head}${body||'<tr><td colspan="9" class="mu">검색 결과가 없습니다.</td></tr>'}${foot}</table></div>
@@ -287,7 +290,7 @@ function upload(){
  const tabs=multi?`<div class="row" style="gap:6px">${U.order.map((n,i)=>`<button class="btn s ${n===U.sheet?'on':''}" onclick="pickSheet(${i})">${U.sel[n]?'☑':'☐'} ${esc(n)} (${n===U.sheet?P.length:cnt(n)}줄)</button>`).join('')}</div>`:'';
  const nm=multi?esc((U.name||'배정')+'_'+U.sheet):esc(U.name||'(이름 없음)');
  return `<h2>엑셀 업로드 · 확인</h2>${aiBox()}${tabs}${U.aiNote?`<div class="${/실패/.test(U.aiNote)?'warn':'msg'}">${U.aiNote?esc(U.aiNote):''}</div>`:''}
- <div class="box" style="margin-bottom:10px"><b>배정 이름</b> ${nm} <span class="mu">(업로드한 파일 이름${multi?'_시트 이름':''})</span>${multi?`<br><label><input type="checkbox" ${U.sel[U.sheet]?'checked':''} onchange="U.sel[U.sheet]=this.checked;render()"> 이 시트(${esc(U.sheet)})를 등록에 포함</label> <span class="mu">· 등록 시 품목의 분류가 “${esc(U.sheet)}”로 저장됩니다</span>`:''}</div>
+ <div class="box" style="margin-bottom:10px"><div class="row" style="margin:0 0 8px"><b>입고일</b><input type="date" value="${esc(U.inDate||ymd(new Date()))}" onchange="U.inDate=this.value"><span class="mu">기본은 업로드한 오늘 날짜입니다. 실제로 물품을 받은 날로 바꿀 수 있어요. 이 날짜로 센터 재고에 자동 입고됩니다.</span></div><b>배정 이름</b> ${nm} <span class="mu">(업로드한 파일 이름${multi?'_시트 이름':''})</span>${multi?`<br><label><input type="checkbox" ${U.sel[U.sheet]?'checked':''} onchange="U.sel[U.sheet]=this.checked;render()"> 이 시트(${esc(U.sheet)})를 등록에 포함</label> <span class="mu">· 등록 시 품목의 분류가 “${esc(U.sheet)}”로 저장됩니다</span>`:''}</div>
  <div class="row"><button class="btn s" onclick="reSheet()">이 시트 다시 분석</button><button class="btn s" onclick="guess();U.aiNote='';render()">규칙 방식으로 다시 찾기</button><span class="mu">다른 파일을 끌어다 놓으면 새로 분석합니다.</span></div>
  <details class="box" ${(gcfg().on&&gcfg().key)?'':'open'}><summary class="mu">열이 잘못 읽혔다면 직접 고치기 (보통은 필요 없어요)</summary><div class="g2"><div><label class="f">품명 열</label><select onchange="U.map.name=+this.value;render()">${opt(m.name)}</select></div>
  <div><label class="f">규격 열</label><select onchange="U.map.spec=+this.value;render()">${opt(m.spec,1)}</select></div>
@@ -303,7 +306,7 @@ function upload(){
  <div class="row" style="margin-top:12px"><button class="btn" onclick="applyUp()">배정 등록${multi?` (선택한 시트 ${nsel}개)`:''}</button><button class="btn s" onclick="resetU();render()">취소</button></div>
  <p class="mu">같은 품명·규격(·분류)이 이미 있으면 기존 품목에 배정을 추가합니다. 올릴 때마다 별도 배정으로 쌓이며 덮어쓰지 않습니다.</p>`;
 }
-const resetU=()=>{U.rows=null;U.sheets={};U.order=[];U.sel={};U.sheet='';U.busy=''};
+const resetU=()=>{U.inDate='';U.rows=null;U.sheets={};U.order=[];U.sel={};U.sheet='';U.busy=''};
 function snap(){if(U.sheet&&U.rows)U.sheets[U.sheet]={rows:U.rows,h:U.h,H:U.H,map:U.map,cm:U.cm,aiNote:U.aiNote}}
 function loadSnap(n){const s=U.sheets[n];U.sheet=n;U.rows=s.rows;U.h=s.h;U.H=s.H;U.map=s.map;U.cm=s.cm;U.aiNote=s.aiNote}
 function withSheet(n,fn){if(n===U.sheet)return fn();const keep=U.sheet;snap();loadSnap(n);try{return fn()}finally{snap();loadSnap(keep)}}
@@ -421,11 +424,11 @@ function regSheet(label,cat,file,up){
  const cid={},H=hdr();
  for(const c of Object.keys(U.cm).map(Number)){const v=U.cm[c];if(v==='__skip')continue;
   if(v==='__new'){const nm=String(H[c]).trim();let e=S.centers.find(x=>ck(nm)&&ck(x.name)===ck(nm))||S.centers.find(x=>norm(x.name)===norm(nm));if(!e){e={id:uid(),name:nm};S.centers.push(e)}cid[c]=e.id}else cid[c]=v}
- const b={id:uid(),label,date:ymd(new Date()),file,up,sheet:cat||''};S.batches.push(b);
+ const b={id:uid(),label,date:ymd(new Date()),inDate:U.inDate||ymd(new Date()),file,up,sheet:cat||''};S.batches.push(b);
  let ni=0,ei=0,na=0;
- P.forEach(x=>{let it=S.items.find(i=>norm(i.name)===norm(x.n)&&norm(i.spec)===norm(x.sp)&&norm(i.cat)===norm(cat));
-  if(it)ei++;else{it={id:uid(),name:x.n,spec:x.sp,cat:cat||''};S.items.push(it);ni++}
-  x.d.forEach(y=>{if(cid[y.c]&&y.q>0){const a={id:uid(),batch:b.id,itemId:it.id,centerId:cid[y.c],qty:y.q};S.allocs.push(a);S.lots.push(autoLot(a,b.date));na++}})});
+ P.forEach(x=>{let it=S.items.find(i=>norm(i.name)===norm(x.n)&&norm(i.spec)===norm(x.sp));
+  if(it){ei++;if(!it.cat&&cat)it.cat=cat}else{it={id:uid(),name:x.n,spec:x.sp,cat:cat||''};S.items.push(it);ni++}
+  x.d.forEach(y=>{if(cid[y.c]&&y.q>0){const a={id:uid(),batch:b.id,itemId:it.id,centerId:cid[y.c],qty:y.q};S.allocs.push(a);S.lots.push(autoLot(a,b.inDate));na++}})});
  return {ni,ei,na};
 }
 function applyUp(){
@@ -440,11 +443,11 @@ function applyUp(){
 function tpl(){const ws=XLSX.utils.aoa_to_sheet([['품명','규격','총수량','중앙센터','동부센터','서부센터'],['멸균 거즈','10x10cm',300,100,120,80],['탄력 붕대','7.5cm',150,50,50,50]]),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'배정');XLSX.writeFile(wb,'배정양식예시.xlsx')}
 function exportX(){
  buildAB();const s=scope(),ids=s.ids,tot=!ids,cs=S.centers,fl=s.fl;
- const its=S.items.filter(i=>tot||S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch))).filter(i=>!vs||(i.cat||'__none')===vs);
+ const its=S.items.filter(i=>tot||S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch))).filter(i=>!vs||itemCats(i,ids).includes(vs));
  const rows=buildRows(its,fl,ids,tot,SPLIT,s.f);
  const head=['분류','품명','규격',...(fl.length?['파일']:[]),...cs.flatMap(c=>[c.name+' 배정',c.name+' 입고',c.name+' 재고']),'전체 배정','전체 입고','전체 재고'];
  const a=[head];
- rows.forEach(r=>{const i=r.i,t=sc(i.id,'',r.ids);a.push([i.cat||'',i.name,i.spec,...(fl.length?[r.f?r.f.name:r.un?'직접 입력':'전체 합산']:[]),...cs.flatMap(c=>{const x=sc(i.id,c.id,r.ids);return [x.a,x.r,x.s]}),t.a,t.r,t.s])});
+ rows.forEach(r=>{const i=r.i,t=sc(i.id,'',r.ids);a.push([catTxt(i,r.ids),i.name,i.spec,...(fl.length?[r.f?r.f.name:r.un?'직접 입력':'전체 합산']:[]),...cs.flatMap(c=>{const x=sc(i.id,c.id,r.ids);return [x.a,x.r,x.s]}),t.a,t.r,t.s])});
  const clean=x=>String(x).replace(/[\\\/\?\*\[\]:]/g,'_');
  const ws=XLSX.utils.aoa_to_sheet(a),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,clean(tot?'총 합계':s.f.name).slice(0,31));
  XLSX.writeFile(wb,'센터별현황_'+clean(tot?'총합계':s.f.name)+(vs?'_'+clean(catLabel(vs)):'')+'_'+ymd(new Date())+'.xlsx');
@@ -543,7 +546,7 @@ function saveItem(){
  const it=S.items.find(i=>i.id===ei);if(!it)return;
  const n=$('#m1').value.trim(),sp=$('#m2').value.trim(),ct=$('#m3').value.trim();
  if(!n)return alert('품명을 입력하세요.');
- if(S.items.some(x=>x.id!==it.id&&norm(x.name)===norm(n)&&norm(x.spec)===norm(sp)&&norm(x.cat)===norm(ct)))return alert('같은 품명·규격·분류의 품목이 이미 있습니다.');
+ if(S.items.some(x=>x.id!==it.id&&norm(x.name)===norm(n)&&norm(x.spec)===norm(sp)))return alert('같은 품명·규격의 품목이 이미 있습니다.');
  it.name=n;it.spec=sp;it.cat=ct;save();note='품목 정보를 저장했습니다.';render();
 }
 function saveAlloc(id){
