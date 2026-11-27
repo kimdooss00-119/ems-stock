@@ -124,7 +124,7 @@ const Cloud=(()=>{
 const loginErr=e=>{const c=e&&e.code||'';return /invalid-credential|wrong-password|user-not-found|invalid-email/.test(c)?'이메일 또는 비밀번호가 맞지 않습니다.':c==='auth/network-request-failed'?'네트워크 연결을 확인하세요.':c==='auth/too-many-requests'?'시도가 너무 많습니다. 잠시 뒤에 다시 하세요.':'로그인 실패: '+((e&&e.message)||e)};
 
 let pg='dash',q='',fc='',note='',lc='';
-const sched=()=>{clearTimeout(rtm);rtm=setTimeout(()=>{const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName||'')&&a.id!=='sq')return;render()},150)};
+const sched=()=>{clearTimeout(rtm);rtm=setTimeout(()=>{const a=document.activeElement;if(a&&a.id==='sq'){if(pg==='dash')drawTb();return}if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName||''))return;render()},150)};
 const lg=m=>{const e=$('#lg');if(e)e.style.display=m===false?'none':'flex';if(typeof m==='string'&&$('#lm'))$('#lm').textContent=m};
 function startCloud(){
  CLOUD=true;S={centers:[],items:[],batches:[],allocs:[],lots:[]};LG=[];
@@ -172,11 +172,28 @@ function files(){
  return m;
 }
 function scope(){const fl=files(),f=fl.find(x=>x.key===vf);if(vf&&!f)vf='';return {fl,f,ids:f?new Set(f.ids):null}}
-// 총 합계 보기는 배정·수령·재고, 파일별 보기는 그 파일의 배정 수량만 (수령·재고는 품목 기준이라 파일로 나눌 수 없음)
-function sc(i,c,ids){if(!ids)return stat(i,c);const a=S.allocs.filter(x=>x.itemId===i&&(!c||x.centerId===c)&&ids.has(x.batch)).reduce((s,x)=>s+x.qty,0);return {a,r:0,s:0}}
+// 로트가 어느 파일(배정 묶음)에서 왔는지: 자동 입고 로트는 batch 또는 allocId로 연결
+let AB=new Map(),SPLIT=true;
+const buildAB=()=>{AB=new Map(S.allocs.map(a=>[a.id,a.batch]))};
+const batchOf=l=>l.batch||AB.get(l.allocId)||'';
+function sc(i,c,ids){if(!ids)return stat(i,c);
+ const a=S.allocs.filter(x=>x.itemId===i&&(!c||x.centerId===c)&&ids.has(x.batch)).reduce((s,x)=>s+x.qty,0),
+ L=S.lots.filter(x=>x.itemId===i&&(!c||x.centerId===c)&&ids.has(batchOf(x)));
+ return {a,r:L.reduce((s,x)=>s+(x.rec==null?x.qty:x.rec),0),s:L.reduce((s,x)=>s+x.qty,0)}}
+// 표에 나열할 행: 총 합계에서 파일별로 나눠 보면 같은 품목도 파일마다 한 줄씩
+function buildRows(its,fl,ids,tot,split,f){
+ const out=[],inF=new Set(fl.flatMap(x=>x.ids));
+ its.forEach(i=>{
+  if(!tot){out.push({i,ids,f,k:fl.indexOf(f)});return}
+  if(!split||!fl.length){out.push({i,ids:null,f:null,k:-1});return}
+  let any=false;
+  fl.forEach((x,k)=>{if(S.allocs.some(a=>a.itemId===i.id&&x.ids.includes(a.batch))){out.push({i,ids:new Set(x.ids),f:x,k});any=true}});
+  const un=S.lots.filter(l=>l.itemId===i.id&&!inF.has(batchOf(l)));
+  if(un.length){out.push({i,ids:new Set(un.map(batchOf)),f:null,k:-2,un:true});any=true}
+  if(!any)out.push({i,ids:null,f:null,k:-1});
+ });return out}
 function setVF(k){const fl=files();vf=k<0?'':((fl[k]||{}).key||'');vs='';render()}
 function setVS(k){vs=k<0?'':(curCats[k]||'');render()}
-function cellA(t){return t.a?`<td class="c"><b>${t.a}</b></td>`:'<td class="c mu">-</td>'}
 function renFile(){
  const {f}=scope();if(!f)return;const v=prompt('파일 이름 변경',f.name.replace(/ \(\d+\)$/,''));if(v===null)return;const nm=v.trim();if(!nm)return alert('이름을 입력하세요.');
  const up=uid();S.batches.filter(b=>f.ids.includes(b.id)).forEach(b=>{b.up=up;b.file=nm});vf=up;save();note='파일 이름을 “'+nm+'”(으)로 바꿨습니다.';render();
@@ -188,6 +205,19 @@ function renSheet(){
  S.batches.forEach(b=>{if((b.sheet||'')===old)b.sheet=nm});
  vs=nm;save();note='시트 이름을 “'+nm+'”(으)로 바꿨습니다. 품목 '+n+'개의 분류가 함께 바뀌었습니다.';render();
 }
+function delRow(id,k){
+ buildAB();const it=S.items.find(x=>x.id===id);if(!it)return;
+ const fl=files(),f=k>=0?fl[k]:null,ids=f?new Set(f.ids):null,inF=new Set(fl.flatMap(x=>x.ids));
+ const A=k===-1?S.allocs.filter(a=>a.itemId===id):k===-2||!ids?[]:S.allocs.filter(a=>a.itemId===id&&ids.has(a.batch));
+ const L=S.lots.filter(l=>l.itemId===id&&(k===-1||(k===-2?!inF.has(batchOf(l)):(ids&&ids.has(batchOf(l))))));
+ const where=k===-1?'모든 파일':k===-2?'파일에 속하지 않은 재고(센터에서 직접 입고한 것 등)':'“'+f.name+'” 파일';
+ const qs=L.reduce((s,l)=>s+l.qty,0);
+ if(!A.length&&!L.length)return alert('삭제할 내용이 없습니다.');
+ if(!confirm('“'+it.name+(it.spec?' '+it.spec:'')+'” — '+where+' 분량을 삭제합니다.\n\n배정 '+A.length+'건, 재고 기록 '+L.length+'건(현재고 '+qs+'개)이 지워지고 센터 휴대폰에서도 사라집니다.'+(k>=0?'\n다른 파일의 같은 품목은 남습니다.':'')+'\n되돌릴 수 없습니다. 계속할까요?'))return;
+ const sa=new Set(A),sl=new Set(L);S.allocs=S.allocs.filter(a=>!sa.has(a));S.lots=S.lots.filter(l=>!sl.has(l));
+ if(!S.allocs.some(a=>a.itemId===id)&&!S.lots.some(l=>l.itemId===id))S.items=S.items.filter(x=>x.id!==id);
+ save();note='“'+it.name+'” '+(k===-1?'품목':'해당 분량')+'을 삭제했습니다.';render();
+}
 function delFile(){
  const {f}=scope();if(!f)return;
  const n=S.allocs.filter(a=>f.ids.includes(a.batch)).length;
@@ -197,33 +227,44 @@ function delFile(){
  vf='';vs='';save();note='“'+f.name+'” 배정을 삭제했습니다.';render();
 }
 function dash(){
+ buildAB();
  const {fl,f,ids}=scope(),tot=!ids;
  const inScope=S.items.filter(i=>tot||S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch)));
  curCats=[...new Set(inScope.map(i=>i.cat||'__none'))];
  if(vs&&!curCats.includes(vs))vs='';
- const base=inScope.filter(i=>!vs||(i.cat||'__none')===vs),its=base.filter(i=>norm(i.name+i.spec).includes(norm(q))),cs=S.centers.filter(c=>!fc||c.id===fc),showCat=S.items.some(i=>i.cat);
+ const base=inScope.filter(i=>!vs||(i.cat||'__none')===vs);
  let A=0,R=0;base.forEach(i=>{const t=sc(i.id,'',ids);A+=t.a;R+=t.r});
- const al=tot?S.lots.filter(l=>l.qty>0&&dleft(l.exp)<=WARN&&base.some(i=>i.id===l.itemId)):[],ex=al.filter(l=>dleft(l.exp)<0).length;
+ const al=tot?S.lots.filter(l=>l.exp&&l.qty>0&&dleft(l.exp)<=WARN&&base.some(i=>i.id===l.itemId)):[],ex=al.filter(l=>dleft(l.exp)<0).length;
  const nC=tot?S.centers.length:new Set(S.allocs.filter(a=>ids.has(a.batch)).map(a=>a.centerId)).size;
  const cards=tot?`<div class="cards"><div><b>${nC}</b><span>안전센터</span></div><div><b>${base.length}</b><span>관리 품목</span></div><div><b>${A?Math.round(R/A*100):0}%</b><span>배정 대비 수령 (${R}/${A})</span></div><div><b>${al.length-ex}</b><span>${WARN}일 내 임박</span></div><div><b style="color:var(--er)">${ex}</b><span>만료 재고</span></div><div><b>${S.lots.filter(l=>!l.exp&&l.qty>0&&base.some(i=>i.id===l.itemId)).length}</b><span>유효기간 미입력 재고</span></div></div>`
-  :`<div class="cards"><div><b>${nC}</b><span>배정받은 센터</span></div><div><b>${base.length}</b><span>품목</span></div><div><b>${A}</b><span>배정 수량 합계</span></div></div>`;
+  :`<div class="cards"><div><b>${nC}</b><span>배정받은 센터</span></div><div><b>${base.length}</b><span>품목</span></div><div><b>${A}</b><span>배정 수량 합계</span></div><div><b>${R}</b><span>입고 수량 합계</span></div></div>`;
  const fch=fl.length?`<div class="row" style="gap:6px"><span class="mu">파일</span><button class="btn s ${!f?'on':''}" onclick="setVF(-1)">총 합계</button>${fl.map((x,k)=>`<button class="btn s ${f&&f.key===x.key?'on':''}" onclick="setVF(${k})" title="${esc(x.date)}">${esc(x.name)}</button>`).join('')}</div>`:'';
  const sch=curCats.length>1?`<div class="row" style="gap:6px"><span class="mu">시트</span><button class="btn s ${!vs?'on':''}" onclick="setVS(-1)">전체 (${inScope.length})</button>${curCats.map((c,k)=>`<button class="btn s ${vs===c?'on':''}" onclick="setVS(${k})">${esc(catLabel(c))} (${inScope.filter(i=>(i.cat||'__none')===c).length})</button>`).join('')}${vs?'<button class="btn s" style="margin-left:auto" onclick="renSheet()">시트 이름 변경</button>':''}</div>`:'';
- const finfo=f?`<div class="box" style="margin-bottom:10px"><div class="row" style="margin:0"><b>${esc(f.name)}</b><span class="mu">업로드 ${esc(f.date)} · 이 보기는 이 파일의 배정 수량만 보여줍니다. 수령·재고는 품목 기준이라 “총 합계”에서 확인하세요.</span><button class="btn s" style="margin-left:auto" onclick="renFile()">파일 이름 변경</button><button class="btn s" onclick="delFile()">이 파일 배정 삭제</button></div></div>`:'';
- const w1=Math.max(8,Math.ceil(Math.max(0,...S.items.map(i=>vis(i.name)))*.7)),w2=Math.max(5,Math.ceil(Math.max(0,...S.items.map(i=>vis(i.spec)))*.5));
- const fcol=fl.length>1,sub=tot?'재고/입고':'',cl=tot?cell:cellA,nc=cs.length+1,cw=100;
- const head=`<tr><th class="cn">품목</th><th class="cs">규격</th>${showCat?'<th>분류</th>':''}${cs.map(c=>`<th class="c">${esc(c.name)}${sub?`<br><span class="mu">${sub}</span>`:''}</th>`).join('')}<th class="c">전체${sub?`<br><span class="mu">${sub}</span>`:''}</th>${fcol?'<th>파일별 배정</th>':''}<th></th></tr>`;
- const body=its.map(i=>{const t=sc(i.id,fc,ids);
-  const fb=fcol?`<td class="fl">${fl.filter(x=>tot||f.key===x.key).map(x=>{const n=sc(i.id,fc,new Set(x.ids)).a;return n?`<span class="mu" title="${esc(x.name)}">${esc(shortN(x.name,10))}</span> <b>${n}</b>`:''}).filter(Boolean).join('<br>')||'<span class="mu">-</span>'}</td>`:'';
-  return `<tr><td class="cn"><b>${esc(i.name)}</b></td><td class="cs">${esc(i.spec)}</td>${showCat?`<td>${esc(i.cat||'')}</td>`:''}${cs.map(c=>cl(sc(i.id,c.id,ids))).join('')}${cl(t)}${fb}<td><button class="btn s" onclick="editItem('${i.id}')">수정</button></td></tr>`}).join('');
- const sum=c=>{const o={a:0,r:0,s:0};its.forEach(i=>{const t=sc(i.id,c,ids);o.a+=t.a;o.r+=t.r;o.s+=t.s});return o};
- const foot=its.length?`<tr style="font-weight:700;background:var(--bg)"><td class="cn">합계</td><td class="cs"></td>${showCat?'<td></td>':''}${cs.map(c=>cl(sum(c.id))).join('')}${cl(sum(fc))}${fcol?'<td></td>':''}<td></td></tr>`:'';
+ const finfo=f?`<div class="box" style="margin-bottom:10px"><div class="row" style="margin:0"><b>${esc(f.name)}</b><span class="mu">업로드 ${esc(f.date)} · 이 파일로 배정·입고된 수량만 보여줍니다.</span><button class="btn s" style="margin-left:auto" onclick="renFile()">파일 이름 변경</button><button class="btn s" onclick="delFile()">이 파일 배정 삭제</button></div></div>`:'';
  return `${note?`<div class="msg">${esc(note)}</div>`:''}<h2>센터별 현황</h2>${fch}${sch}${finfo}${cards}
- <div class="row"><input id="sq" placeholder="품목·규격 검색" value="${esc(q)}" oninput="q=this.value;keep()"><select onchange="fc=this.value;render()"><option value="">모든 센터</option>${S.centers.map(c=>`<option value="${c.id}" ${fc===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+ <div class="row"><input id="sq" placeholder="품목·규격 검색" value="${esc(q)}" oninput="q=this.value;drawTb()"><select onchange="fc=this.value;render()"><option value="">모든 센터</option>${S.centers.map(c=>`<option value="${c.id}" ${fc===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+ ${tot&&fl.length?`<label style="display:flex;gap:6px;align-items:center;color:var(--tx)"><input type="checkbox" style="min-height:0" ${SPLIT?'checked':''} onchange="SPLIT=this.checked;render()">파일별로 나눠 보기</label>`:''}
  <button class="btn s" onclick="exportX()">엑셀로 내려받기</button>${S.items.length?'':'<button class="btn" onclick="demo()">샘플 데이터 넣기</button>'}
  ${S.items.length||S.centers.length?'<button class="btn s" onclick="resetData(false)" style="margin-left:auto">현황 초기화</button><button class="btn s" onclick="resetData(true)">전체 초기화 (센터 포함)</button>':''}</div>
- ${S.items.length?`<div class="wrap"><table style="table-layout:fixed;width:calc(${w1+w2}ch + ${nc*cw+(showCat?90:0)+(fcol?150:0)+70}px)"><colgroup><col style="width:${w1}ch"><col style="width:${w2}ch">${showCat?'<col style="width:90px">':''}${('<col style="width:'+cw+'px">').repeat(nc)}${fcol?'<col style="width:150px">':''}<col style="width:70px"></colgroup>${head}${body||'<tr><td colspan="9" class="mu">검색 결과가 없습니다.</td></tr>'}${foot}</table></div>
- <p class="mu">${tot?'칸 안의 숫자는 재고/입고 수량입니다. 앞의 숫자는 지금 남은 재고, 뒤의 숫자는 지금까지 입고된 수량이라 두 숫자의 차이가 출고·폐기로 빠진 수량입니다. 아래 막대는 입고 수량 대비 남은 재고의 비율이며, 30% 미만이면 주황색으로 바뀝니다. 칸에 마우스를 올리면 배정 수량도 볼 수 있습니다.'+(fcol?' “파일별 배정”은 업로드한 파일마다 배정된 수량입니다.':''):'칸 안의 숫자는 이 파일에서 배정된 수량입니다.'}</p>`:'<div class="box mu">아직 품목이 없습니다. 엑셀 업로드에서 배정 목록을 올리거나 샘플 데이터를 넣어 보세요.</div>'}`;
+ <div id="tb">${tbHtml()}</div>`;
+}
+function drawTb(){const e=$('#tb');if(e)e.innerHTML=tbHtml()}
+function tbHtml(){
+ if(!S.items.length)return '<div class="box mu">아직 품목이 없습니다. 엑셀 업로드에서 배정 목록을 올리거나 샘플 데이터를 넣어 보세요.</div>';
+ buildAB();
+ const {fl,f,ids}=scope(),tot=!ids;
+ const inScope=S.items.filter(i=>tot||S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch)));
+ const base=inScope.filter(i=>!vs||(i.cat||'__none')===vs),its=base.filter(i=>norm(i.name+i.spec).includes(norm(q))),cs=S.centers.filter(c=>!fc||c.id===fc),showCat=S.items.some(i=>i.cat);
+ const rows=buildRows(its,fl,ids,tot,SPLIT,f),fcol=fl.length>0,nc=cs.length+1,cw=100,fw=fcol?120:0;
+ const w1=Math.max(8,Math.ceil(Math.max(0,...S.items.map(i=>vis(i.name)))*.7)),w2=Math.max(5,Math.ceil(Math.max(0,...S.items.map(i=>vis(i.spec)))*.5));
+ const fname=r=>r.f?esc(shortN(r.f.name,16)):r.un?'직접 입력':'전체 합산';
+ const head=`<tr><th class="cn">품목</th><th class="cs">규격</th>${showCat?'<th>분류</th>':''}${fcol?'<th>파일</th>':''}${cs.map(c=>`<th class="c">${esc(c.name)}<br><span class="mu">재고/입고</span></th>`).join('')}<th class="c">전체<br><span class="mu">재고/입고</span></th><th></th></tr>`;
+ const body=rows.map(r=>{const i=r.i;
+  return `<tr><td class="cn"><b>${esc(i.name)}</b></td><td class="cs">${esc(i.spec)}</td>${showCat?`<td>${esc(i.cat||'')}</td>`:''}${fcol?`<td class="fl" title="${esc(r.f?r.f.name:'')}">${fname(r)}</td>`:''}${cs.map(c=>cell(sc(i.id,c.id,r.ids))).join('')}${cell(sc(i.id,fc,r.ids))}<td style="white-space:nowrap"><button class="btn s" onclick="editItem('${i.id}')">수정</button> <button class="btn s" style="color:var(--er)" onclick="delRow('${i.id}',${r.k})">삭제</button></td></tr>`}).join('');
+ const sum=c=>{const o={a:0,r:0,s:0};rows.forEach(r=>{const t=sc(r.i.id,c,r.ids);o.a+=t.a;o.r+=t.r;o.s+=t.s});return o};
+ const foot=rows.length?`<tr style="font-weight:700;background:var(--bg)"><td class="cn">합계</td><td class="cs"></td>${showCat?'<td></td>':''}${fcol?'<td></td>':''}${cs.map(c=>cell(sum(c.id))).join('')}${cell(sum(fc))}<td></td></tr>`:'';
+ return `<div class="wrap"><table style="table-layout:fixed;width:calc(${w1+w2}ch + ${nc*cw+(showCat?90:0)+fw+150}px)"><colgroup><col style="width:${w1}ch"><col style="width:${w2}ch">${showCat?'<col style="width:90px">':''}${fcol?'<col style="width:120px">':''}${('<col style="width:'+cw+'px">').repeat(nc)}<col style="width:150px"></colgroup>${head}${body||'<tr><td colspan="9" class="mu">검색 결과가 없습니다.</td></tr>'}${foot}</table></div>
+ <p class="mu">칸 안의 숫자는 재고/입고 수량입니다. 앞의 숫자는 지금 남은 재고, 뒤의 숫자는 지금까지 입고된 수량이라 두 숫자의 차이가 출고·폐기로 빠진 수량입니다. 아래 막대는 입고 수량 대비 남은 재고의 비율이며, 30% 미만이면 주황색으로 바뀝니다. 칸에 마우스를 올리면 배정 수량도 볼 수 있습니다.${tot&&fcol?(SPLIT?' 같은 품목이라도 파일이 다르면 줄을 나눠 보여 줍니다. 센터가 직접 입고한 분량은 “직접 입력”으로 표시됩니다.':' 지금은 파일을 합산해서 보고 있습니다.'):''}</p>`;
 }
 function cell(t){
  if(!t.a&&!t.r)return '<td class="c mu">-</td>';
@@ -373,7 +414,7 @@ function parsed(){
  return out;
 }
 // 배정이 등록되면 센터 재고에 자동 입고 (유효기간은 센터에서 입력)
-const autoLot=(a,date)=>({id:uid(),itemId:a.itemId,centerId:a.centerId,exp:'',rec:a.qty,qty:a.qty,date:date||ymd(new Date()),allocId:a.id,auto:true});
+const autoLot=(a,date)=>({id:uid(),itemId:a.itemId,centerId:a.centerId,exp:'',rec:a.qty,qty:a.qty,date:date||ymd(new Date()),allocId:a.id,batch:a.batch,auto:true});
 const untouched=l=>l&&l.auto&&!l.exp&&l.qty===l.rec;
 function regSheet(label,cat,file,up){
  const P=parsed().filter(x=>!(U.excl&&x.warn));if(!P.length)return null;
@@ -398,11 +439,12 @@ function applyUp(){
 }
 function tpl(){const ws=XLSX.utils.aoa_to_sheet([['품명','규격','총수량','중앙센터','동부센터','서부센터'],['멸균 거즈','10x10cm',300,100,120,80],['탄력 붕대','7.5cm',150,50,50,50]]),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'배정');XLSX.writeFile(wb,'배정양식예시.xlsx')}
 function exportX(){
- const s=scope(),ids=s.ids,tot=!ids,cs=S.centers,fl=s.fl;
+ buildAB();const s=scope(),ids=s.ids,tot=!ids,cs=S.centers,fl=s.fl;
  const its=S.items.filter(i=>tot||S.allocs.some(a=>a.itemId===i.id&&ids.has(a.batch))).filter(i=>!vs||(i.cat||'__none')===vs);
- const head=['분류','품명','규격',...cs.flatMap(c=>tot?[c.name+' 배정',c.name+' 수령',c.name+' 재고']:[c.name+' 배정']),'전체 배정',...(tot?['전체 수령','전체 재고',...fl.map(f=>'파일별 배정: '+f.name)]:[])];
+ const rows=buildRows(its,fl,ids,tot,SPLIT,s.f);
+ const head=['분류','품명','규격',...(fl.length?['파일']:[]),...cs.flatMap(c=>[c.name+' 배정',c.name+' 입고',c.name+' 재고']),'전체 배정','전체 입고','전체 재고'];
  const a=[head];
- its.forEach(i=>{const t=sc(i.id,'',ids);a.push([i.cat||'',i.name,i.spec,...cs.flatMap(c=>{const x=sc(i.id,c.id,ids);return tot?[x.a,x.r,x.s]:[x.a]}),t.a,...(tot?[t.r,t.s,...fl.map(f=>sc(i.id,'',new Set(f.ids)).a)]:[])])});
+ rows.forEach(r=>{const i=r.i,t=sc(i.id,'',r.ids);a.push([i.cat||'',i.name,i.spec,...(fl.length?[r.f?r.f.name:r.un?'직접 입력':'전체 합산']:[]),...cs.flatMap(c=>{const x=sc(i.id,c.id,r.ids);return [x.a,x.r,x.s]}),t.a,t.r,t.s])});
  const clean=x=>String(x).replace(/[\\\/\?\*\[\]:]/g,'_');
  const ws=XLSX.utils.aoa_to_sheet(a),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,clean(tot?'총 합계':s.f.name).slice(0,31));
  XLSX.writeFile(wb,'센터별현황_'+clean(tot?'총합계':s.f.name)+(vs?'_'+clean(catLabel(vs)):'')+'_'+ymd(new Date())+'.xlsx');
