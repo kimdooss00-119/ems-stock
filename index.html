@@ -144,10 +144,10 @@ const lastOut=id=>{const a=S.logs.filter(g=>g.itemId===id&&g.type==='out'&&!g.vo
 const inUser=l=>{const g=S.logs.filter(x=>x.lotId===l.id&&x.type==='in'&&!x.voided).pop();return g?g.user:(l.auto?'자동 입고':'-')};
 let tab='stock',flt='ok',rf=addD(-30),rt=ymd(new Date());
 const TABS=[['stock','재고'],['in','입고'],['hist','이력'],['exp','엑셀']];
-function go(t){tab=t;ed=null;render()}
+function go(t){tab=t;ed=null;eo=null;render()}
 function msg(t){alert(t)}
 function user(){const u=$('#u').value.trim();if(!u){msg('담당자 이름을 먼저 입력하세요.');$('#u').focus();return null}S.user=u;return u}
-let ed=null,outItem='';
+let ed=null,eo=null,outItem='';
 function goIn(id){if(sq){shAdd(sq);sb=''}tab='in';ed=null;render();const s=$('#i1');if(s){s.value=id;$('#nw').style.display='none'}const q=$('#psel');if(q)q.value=id}
 function goOut(id){if(sq){shAdd(sq);sb=''}if(total(id)<=0)return msg('출고할 재고가 없습니다.');outItem=id;tab='out';ed=null;render()}
 const thumb=it=>it.img?`<img src="${it.img}" alt="${esc(it.name)}" style="width:52px;height:52px;object-fit:cover;border-radius:6px;display:block">`:'<div style="width:52px;height:52px;border-radius:6px;background:var(--bg);border:1px solid var(--ln);display:flex;align-items:center;justify-content:center;font-size:22px">📦</div>';
@@ -164,7 +164,8 @@ function editView(){
  ${expPhoto(l.itemId)}
  <label for="d1">입고일</label><input id="d1" type="date" value="${l.inDate||''}">
  <label for="d2">유효기간</label><input id="d2" type="date" value="${l.exp||''}">
- <label for="d3">${pe?'이 유효기간의 수량':'현재 수량'}</label><input id="d3" type="number" min="0" inputmode="numeric" value="${l.qty}">
+ <label for="d3">${pe?'이 유효기간의 수량':'현재 수량'}</label><input id="d3" type="number" min="0" inputmode="numeric" value="${l.qty}" ${l.auto&&!pe?'readonly style="opacity:.6"':''}>
+ ${l.auto&&!pe?'<div class="mu">배정 입고 수량은 센터에서 수정할 수 없습니다. 출고로 줄어든 수량은 출고 기록에서 수정하세요.</div>':''}
  ${pe?'<div class="mu">받은 물품의 유효기간이 여러 개면, 이 유효기간에 해당하는 수량만 적으세요. 나머지는 유효기간 미입력으로 남습니다.</div>':''}
  <label for="d4">메모</label><input id="d4" value="${esc(memoOf(l))}">
  <button class="btn" onclick="saveLot()">${pe?'유효기간 저장':'수정 저장'}</button>
@@ -174,7 +175,7 @@ function editView(){
 function saveLot(){
  const u=user();if(!u)return;
  const l=S.lots.find(x=>x.id===ed);if(!l)return;
- const dt=$('#d1').value,ex=$('#d2').value,q=parseInt($('#d3').value,10),mm=$('#d4').value.trim();
+ const dt=$('#d1').value,ex=$('#d2').value,mm=$('#d4').value.trim();let q=parseInt($('#d3').value,10);if(l.auto&&l.exp)q=l.qty;
  if(!dt)return msg('입고일을 입력하세요.');
   if(!(q>=0))return msg('수량은 0 이상으로 입력하세요.');
  if(!l.exp&&!ex){l.inDate=dt;l.memo=mm;save();ed=null;phNo();msg('저장했습니다. 유효기간은 나중에 입력할 수 있습니다.');return render()}
@@ -232,7 +233,8 @@ function evHtml(id){
  const row=g=>{
   const l=lots.find(x=>x.id===g.lotId),d=g.exp?dleft(g.exp):null,first=g.type==='in'&&!g.voided&&l&&lastIn[g.lotId]===g.id;
   const left=!g.exp||g.type==='out'?'':d<0?'<span class="tag t-er">만료</span>':d<=WARN?'<span class="tag t-wn">남은일자 '+d+'일</span>':'<span class="mu">남은일자 '+d+'일</span>';
-  const act=first?(l.exp?`<button class="btn s evb" onclick="editLot('${l.id}')">수정</button>`:`<button class="btn evb" onclick="editLot('${l.id}')">유효기간 입력</button>`):'';
+  const outOk=g.type==='out'&&!g.voided&&l&&!g.virt;
+  const act=outOk?`<button class="btn s evb" onclick="editOut('${g.id}')">수정</button>`:first?(l.exp?`<button class="btn s evb" onclick="editLot('${l.id}')">수정</button>`:`<button class="btn evb" onclick="editLot('${l.id}')">유효기간 입력</button>`):'';
   const who=[g.user?'담당 '+esc(g.user):'',g.note?esc(g.note):''].filter(Boolean).join(' · ');
   return `<div class="ev ${g.voided?'void':''}"><div class="evh"><span class="evd">${dateOf(g)||'-'}</span><span class="tag ${g.type==='in'?'t-ok':g.type==='out'?'t-wn':'t-er'}">${EV[g.type]||esc(g.type)}</span>${g.voided?'<span class="tag t-er">삭제됨</span>':''}<b class="evq">${g.d>0?'+':''}${g.d}</b></div>
   <div class="evx"><span>유효기간 ${g.exp?'<b>'+esc(g.exp)+'</b>':'<span class="tag t-wn">미입력</span>'}</span>${left}${act}</div>${who?`<div class="mu evn">${who}</div>`:''}</div>`};
@@ -263,6 +265,7 @@ function drawList(){const e=$('#sl');if(e)e.innerHTML=listHtml();const c=$('#chi
 function setSc(k){sc=chipList()[k][0];render()}
 function fav(id){S.fav=S.fav||{};if(S.fav[id])delete S.fav[id];else S.fav[id]=1;persist();drawList()}
 function stock(){
+ if(eo)return editOutView();
  if(ed)return editView();
  let tq=0,soon=0,exp=0,PN=0;
  S.items.forEach(it=>{const ls=lotsOf(it.id);tq+=ls.reduce((s,l)=>s+l.qty,0);exp+=ls.filter(l=>dleft(l.exp)<0).length;soon+=ls.filter(l=>dleft(l.exp)>=0&&dleft(l.exp)<=WARN).length;PN+=ls.filter(l=>!l.exp).length});
@@ -581,6 +584,31 @@ function fix(id){
  }else lot.qty-=g.d;
  g.voided=true;g.voidBy=u;g.voidTs=now();
  save();msg('삭제했습니다. 재고가 원래대로 돌아왔습니다.');render();
+}
+function editOut(id){eo=id;render()}
+function outParts(g){const n=g.note||'',k=n.indexOf(' · 입고일 '),h=k<0?n:n.slice(0,k),t=k<0?'':n.slice(k),j=h.indexOf(' / ');return{re:j<0?h:h.slice(0,j),dest:j<0?'':h.slice(j+3),tail:t}}
+function editOutView(){
+ const g=S.logs.find(x=>x.id===eo),l=g&&S.lots.find(x=>x.id===g.lotId);if(!g||!l||g.voided||g.type!=='out'){eo=null;return ''}
+ const P=outParts(g),mx=l.qty+Math.abs(g.d),rs=REASONS.indexOf(P.re)<0?[P.re].concat(REASONS):REASONS;
+ return `<div class="card"><b>${esc(item(g.itemId).name)}</b> 출고 수정<div class="mu">입고일 ${l.inDate||'-'} · 유효기간 ${l.exp||'미입력'} · 이 입고분 최대 ${mx}개</div></div>
+ <label for="e3">사유</label><select id="e3">${rs.map(r=>`<option ${r===P.re?'selected':''}>${esc(r)}</option>`).join('')}</select>
+ <label for="e5">출고일</label><input id="e5" type="date" value="${dateOf(g)}">
+ <label for="e1">출고 수량</label><input id="e1" type="number" min="1" max="${mx}" inputmode="numeric" value="${Math.abs(g.d)}">
+ <label for="e4">출고처 (차량·센터)</label><input id="e4" value="${esc(P.dest)}">
+ <button class="btn" onclick="saveOut()">수정 저장</button>
+ <button class="btn s" style="width:100%;margin-top:10px;min-height:44px" onclick="eo=null;render()">취소</button>
+ <p class="mu">수정하면 재고가 자동으로 맞춰지고, 기록에는 수정한 담당자가 남습니다.</p>`}
+function saveOut(){
+ const u=user();if(!u)return;
+ const g=S.logs.find(x=>x.id===eo),l=g&&S.lots.find(x=>x.id===g.lotId);if(!g||!l)return;
+ const q=parseInt($('#e1').value,10),dt=$('#e5').value,re=$('#e3').value,dest=$('#e4').value.trim(),old=Math.abs(g.d),P=outParts(g);
+ if(!dt)return msg('출고일을 입력하세요.');
+ if(!(q>=1)||q>l.qty+old)return msg('수량은 1 이상, '+(l.qty+old)+' 이하로 입력하세요.');
+ if(re.startsWith('폐기')!==(dleft(l.exp)<0)&&re!==P.re)return msg(re.startsWith('폐기')?'폐기는 만료된 재고만 가능합니다.':'만료된 재고는 일반 출고 사유를 쓸 수 없습니다.');
+ const ch=[];if(q!==old)ch.push('수량 '+old+'→'+q);if(dt!==dateOf(g))ch.push('출고일 '+dateOf(g)+'→'+dt);if(re!==P.re)ch.push('사유 변경');if(dest!==P.dest)ch.push('출고처 변경');
+ if(!ch.length){eo=null;return render()}
+ l.qty+=old-q;g.d=-q;g.date=dt;g.note=re+(dest?' / '+dest:'')+P.tail+' · 수정됨('+u+')';g.synced=false;
+ save();eo=null;msg('출고 수정 완료 ('+ch.join(', ')+')');render();
 }
 function sync(id,v){const g=S.logs.find(x=>x.id===id);if(g){g.synced=v;save();render()}}
 const TL={in:'입고',out:'출고',fix:'정정'};
